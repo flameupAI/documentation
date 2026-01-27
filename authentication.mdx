@@ -24,9 +24,9 @@ The key includes your workspace ID, so you don't need to specify it separately w
 
 ## Authentication Methods
 
-### X-API-Key Header (Recommended)
+### Authorization Header (Recommended)
 
-Pass your API key in the `X-API-Key` header:
+Pass your API key in the `Authorization` header using the Bearer scheme:
 
 <CodeGroup>
 ```javascript
@@ -35,7 +35,7 @@ const response = await fetch(
   {
     method: 'GET',
     headers: {
-      'X-API-Key': 'flare_live_your_api_key_here'
+      'Authorization': 'Bearer flare_live_your_api_key_here'
     }
   }
 );
@@ -47,14 +47,14 @@ import requests
 response = requests.get(
     'https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people',
     headers={
-        'X-API-Key': 'flare_live_your_api_key_here'
+        'Authorization': 'Bearer flare_live_your_api_key_here'
     }
 )
 ```
 
 ```bash
 curl -X GET "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
-  -H "X-API-Key: flare_live_your_api_key_here"
+  -H "Authorization: Bearer flare_live_your_api_key_here"
 ```
 </CodeGroup>
 

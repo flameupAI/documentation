@@ -7,7 +7,7 @@ description: Create, update, and manage user profiles with the Flameup People AP
 
 The People API allows you to manage user profiles in Flameup. Each person represents a user in your system with their contact information, attributes, and engagement history.
 
-<Callout kind="info">**Required Permission**: `people:read` for GET requests, `people:write` for POST/PUT/DELETE requests.</Callout>
+<Callout kind="info">**Required Permission**: `people:read` for GET requests, `people:write` for POST/PUT requests, `people:delete` for DELETE requests.</Callout>
 
 ## Person Object
 
@@ -17,24 +17,17 @@ A person in Flameup has the following structure:
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "workspace_id": "ws_abc123",
-  "external_id": "user_12345",
+  "userId": "user_12345",
   "email": "jane@example.com",
-  "phone": "+1234567890",
-  "first_name": "Jane",
-  "last_name": "Doe",
-  "avatar_url": "https://example.com/avatar.jpg",
-  "timezone": "America/New_York",
-  "locale": "en-US",
-  "status": "active",
-  "attributes": {
+  "anonymousId": null,
+  "traits": {
+    "first_name": "Jane",
+    "last_name": "Doe",
     "plan": "premium",
-    "company": "Acme Inc",
-    "role": "admin"
+    "company": "Acme Inc"
   },
   "created_at": "2024-01-15T10:30:00Z",
-  "updated_at": "2024-01-20T14:45:00Z",
-  "first_seen_at": "2024-01-15T10:30:00Z",
-  "last_seen_at": "2024-01-20T14:45:00Z"
+  "updated_at": "2024-01-20T14:45:00Z"
 }
 ```
 
@@ -43,16 +36,11 @@ A person in Flameup has the following structure:
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | UUID | Flameup's internal identifier (read-only) |
-| `external_id` | string | Your unique identifier for this user |
-| `email` | string | User's email address |
-| `phone` | string | User's phone number (E.164 format recommended) |
-| `first_name` | string | User's first name |
-| `last_name` | string | User's last name |
-| `avatar_url` | string | URL to user's profile image |
-| `timezone` | string | IANA timezone (e.g., "America/New_York") |
-| `locale` | string | Locale code (e.g., "en-US") |
-| `status` | string | `active`, `unsubscribed`, or `bounced` |
-| `attributes` | object | Custom attributes (any JSON object) |
+| `workspace_id` | string | Workspace identifier (read-only) |
+| `userId` | string | Your unique identifier for this user (required, max 255 chars) |
+| `email` | string | User's email address (optional, max 254 chars) |
+| `anonymousId` | string | Anonymous identifier for linking anonymous to known users |
+| `traits` | object | Custom user attributes (see validation rules) |
 | `created_at` | timestamp | When the person was created (read-only) |
 | `updated_at` | timestamp | When the person was last updated (read-only) |
 
@@ -70,7 +58,7 @@ const response = await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       userId: 'user_12345',           // Required: your unique ID
@@ -93,7 +81,7 @@ response = requests.post(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'userId': 'user_12345',
@@ -113,7 +101,7 @@ person = response.json()
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "userId": "user_12345",
     "email": "jane@example.com",
@@ -127,7 +115,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
 ```
 </CodeGroup>
 
-<Callout kind="tip">The `userId` field maps to `external_id` in the response. Use a stable, unique identifier from your system.</Callout>
+<Callout kind="tip">Use a stable, unique identifier from your system as the `userId`. Database primary keys or UUIDs work well.</Callout>
 
 ## Get a Person
 
@@ -141,7 +129,7 @@ const response = await fetch(
   `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people/${personId}`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -152,7 +140,7 @@ const person = await response.json();
 ```python
 response = requests.get(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/{person_id}',
-    headers={'X-API-Key': API_KEY}
+    headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
 person = response.json()
@@ -160,7 +148,7 @@ person = response.json()
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/{person_id}" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -178,7 +166,7 @@ const response = await fetch(
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       traits: {
@@ -197,7 +185,7 @@ response = requests.put(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/{person_id}',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'traits': {
@@ -213,7 +201,7 @@ person = response.json()
 ```bash
 curl -X PUT "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/{person_id}" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "traits": {
       "plan": "enterprise",
@@ -239,7 +227,7 @@ const response = await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       userId: 'user_12345',
@@ -262,7 +250,7 @@ response = requests.post(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/upsert',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'userId': 'user_12345',
@@ -282,7 +270,7 @@ print(f"Was created: {result['was_created']}")
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/upsert" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "userId": "user_12345",
     "email": "jane@example.com",
@@ -307,7 +295,7 @@ Retrieve a paginated list of people.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `limit` | integer | 20 | Number of results (max 100) |
+| `limit` | integer | 50 | Number of results (max 1000) |
 | `offset` | integer | 0 | Pagination offset |
 | `status` | string | - | Filter by status: `active`, `unsubscribed`, `bounced` |
 | `search` | string | - | Search by name or email |
@@ -326,7 +314,7 @@ const response = await fetch(
   `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people?${params}`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -337,7 +325,7 @@ const { people, total, limit, offset } = await response.json();
 ```python
 response = requests.get(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people',
-    headers={'X-API-Key': API_KEY},
+    headers={'Authorization': f'Bearer {API_KEY}'},
     params={
         'limit': 50,
         'status': 'active',
@@ -352,7 +340,7 @@ total = data['total']
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people?limit=50&status=active&search=acme" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -379,7 +367,7 @@ Search for people by specific criteria.
 |-----------|------|-------------|
 | `q` | string | General search query |
 | `email` | string | Exact email match |
-| `external_id` | string | Exact external_id match |
+| `userId` | string | Exact userId match |
 | `limit` | integer | Number of results (default 10) |
 
 <CodeGroup>
@@ -389,7 +377,7 @@ const response = await fetch(
   `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people/search?email=jane@example.com`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -399,11 +387,11 @@ const person = people[0];  // First match
 ```
 
 ```python
-# Search by external_id
+# Search by userId
 response = requests.get(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/search',
-    headers={'X-API-Key': API_KEY},
-    params={'external_id': 'user_12345'}
+    headers={'Authorization': f'Bearer {API_KEY}'},
+    params={'userId': 'user_12345'}
 )
 
 data = response.json()
@@ -412,7 +400,7 @@ person = data['people'][0] if data['people'] else None
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/search?email=jane@example.com" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -430,7 +418,7 @@ const response = await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       people: [
@@ -458,7 +446,7 @@ response = requests.post(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/batch',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'people': [
@@ -483,7 +471,7 @@ print(f"Created: {result['created_count']}, Updated: {result['updated_count']}")
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/batch" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "people": [
       {"userId": "user_001", "email": "alice@example.com", "traits": {"first_name": "Alice"}},
@@ -508,7 +496,7 @@ const response = await fetch(
   {
     method: 'DELETE',
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -521,7 +509,7 @@ if (response.ok) {
 ```python
 response = requests.delete(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/{person_id}',
-    headers={'X-API-Key': API_KEY}
+    headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
 if response.status_code == 204:
@@ -530,7 +518,7 @@ if response.status_code == 204:
 
 ```bash
 curl -X DELETE "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/{person_id}" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -548,7 +536,7 @@ const response = await fetch(
   `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people/${personId}/events?limit=50`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -559,7 +547,7 @@ const { events } = await response.json();
 ```python
 response = requests.get(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/{person_id}/events',
-    headers={'X-API-Key': API_KEY},
+    headers={'Authorization': f'Bearer {API_KEY}'},
     params={'limit': 50}
 )
 
@@ -568,7 +556,7 @@ events = response.json()['events']
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/{person_id}/events?limit=50" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -584,7 +572,7 @@ const response = await fetch(
   `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people/stats`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -596,7 +584,7 @@ console.log(`Total: ${stats.total}, Active: ${stats.active}`);
 ```python
 response = requests.get(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people/stats',
-    headers={'X-API-Key': API_KEY}
+    headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
 stats = response.json()
@@ -605,7 +593,7 @@ print(f"Total: {stats['total']}, Active: {stats['active']}")
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/stats" \
-  -H "X-API-Key: your_api_key"
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
