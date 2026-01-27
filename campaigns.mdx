@@ -22,12 +22,13 @@ A campaign in Flameup has the following structure:
   "trigger_type": "event",
   "trigger_config": {
     "event_name": "signed_up",
-    "delay_seconds": 300
+    "delay_minutes": 5
   },
-  "audience_config": {
-    "segments": ["all_users"],
-    "filters": {}
-  },
+  "segments": ["all_users"],
+  "filters": {},
+  "template_id": "tmpl_123",
+  "subject": "Welcome!",
+  "variables": {},
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T14:45:00Z"
 }
@@ -52,8 +53,8 @@ Flameup supports four types of campaign triggers:
       "trigger_type": "event",
       "trigger_config": {
         "event_name": "signed_up",
-        "delay_seconds": 0,
-        "conditions": {
+        "delay_minutes": 0,
+        "properties": {
           "plan": "free"
         }
       }
@@ -63,8 +64,8 @@ Flameup supports four types of campaign triggers:
     | Field | Type | Description |
     |-------|------|-------------|
     | `event_name` | string | The event that triggers the campaign |
-    | `delay_seconds` | integer | Wait time before sending (0 = immediate) |
-    | `conditions` | object | Event property conditions (optional) |
+    | `delay_minutes` | integer | Wait time in minutes before sending (0 = immediate) |
+    | `properties` | object | Event property conditions (optional) |
   </Tab>
   <Tab title="Webhook" icon="zap">
     **Trigger via API call**
@@ -102,7 +103,8 @@ Flameup supports four types of campaign triggers:
     {
       "trigger_type": "schedule",
       "trigger_config": {
-        "cron": "0 9 * * MON",
+        "schedule_type": "cron",
+        "cron_expression": "0 9 * * MON",
         "timezone": "America/New_York"
       }
     }
@@ -110,7 +112,9 @@ Flameup supports four types of campaign triggers:
 
     | Field | Type | Description |
     |-------|------|-------------|
-    | `cron` | string | Cron expression for schedule |
+    | `schedule_type` | string | Type of schedule: `cron` or `one_time` |
+    | `cron_expression` | string | Cron expression (for cron schedules) |
+    | `scheduled_at` | timestamp | Specific time (for one-time schedules) |
     | `timezone` | string | IANA timezone for schedule |
   </Tab>
   <Tab title="Dynamic Schedule" icon="calendar">
@@ -164,20 +168,15 @@ const response = await fetch(
       trigger_type: 'event',
       trigger_config: {
         event_name: 'signed_up',
-        delay_seconds: 300  // 5 minutes after signup
+        delay_minutes: 5
       },
-      messages: [
-        {
-          type: 'push',
-          template: {
-            title: 'Welcome to {{app_name}}!',
-            body: 'Hi {{first_name}}, thanks for joining us.',
-            data: {
-              action: 'open_onboarding'
-            }
-          }
-        }
-      ]
+      template_id: 'tmpl_welcome',
+      subject: 'Welcome to {{app_name}}!',
+      variables: {
+        app_name: 'Acme',
+        first_name: '{{first_name}}'
+      },
+      segments: ['all_users']
     })
   }
 );
@@ -197,20 +196,15 @@ response = requests.post(
         'trigger_type': 'event',
         'trigger_config': {
             'event_name': 'signed_up',
-            'delay_seconds': 300
+            'delay_minutes': 5
         },
-        'messages': [
-            {
-                'type': 'push',
-                'template': {
-                    'title': 'Welcome to {{app_name}}!',
-                    'body': 'Hi {{first_name}}, thanks for joining us.',
-                    'data': {
-                        'action': 'open_onboarding'
-                    }
-                }
-            }
-        ]
+        'template_id': 'tmpl_welcome',
+        'subject': 'Welcome to {{app_name}}!',
+        'variables': {
+            'app_name': 'Acme',
+            'first_name': '{{first_name}}'
+        },
+        'segments': ['all_users']
     }
 )
 
@@ -226,15 +220,12 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/campaigns"
     "trigger_type": "event",
     "trigger_config": {
       "event_name": "signed_up",
-      "delay_seconds": 300
+      "delay_minutes": 5
     },
-    "messages": [{
-      "type": "push",
-      "template": {
-        "title": "Welcome to {{app_name}}!",
-        "body": "Hi {{first_name}}, thanks for joining us."
-      }
-    }]
+    "template_id": "tmpl_welcome",
+    "subject": "Welcome to {{app_name}}!",
+    "variables": {"app_name": "Acme"},
+    "segments": ["all_users"]
   }'
 ```
 </CodeGroup>
@@ -249,9 +240,9 @@ Retrieve all campaigns in a workspace.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `status` | string | Filter by status: `draft`, `active`, `paused`, `completed` |
+| `status` | string | Filter by status: `draft`, `active`, `paused`, `completed`, `archived`, `scheduled`, `failed` |
 | `trigger_type` | string | Filter by trigger type |
-| `limit` | integer | Number of results (default 20) |
+| `limit` | integer | Number of results (default 50) |
 | `offset` | integer | Pagination offset |
 
 <CodeGroup>
@@ -331,7 +322,7 @@ const response = await fetch(
       name: 'Welcome Series v2',
       trigger_config: {
         event_name: 'signed_up',
-        delay_seconds: 600  // Changed to 10 minutes
+        delay_minutes: 10
       }
     })
   }
@@ -348,11 +339,14 @@ curl -X PUT "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/campaigns/{
 
 ## Campaign Status
 
-Campaigns have a status lifecycle:
+Campaigns have the following statuses:
 
 <Steps>
   <Step title="Draft" icon="edit">
     Initial state. Campaign is not active and won't trigger.
+  </Step>
+  <Step title="Scheduled" icon="calendar">
+    Campaign is scheduled to activate at a future time.
   </Step>
   <Step title="Active" icon="play">
     Campaign is live and will trigger based on its configuration.
@@ -361,30 +355,48 @@ Campaigns have a status lifecycle:
     Campaign is temporarily stopped. Can be resumed.
   </Step>
   <Step title="Completed" icon="check">
-    Campaign has finished (for one-time campaigns) or been archived.
+    Campaign has finished (for one-time campaigns).
+  </Step>
+  <Step title="Archived" icon="archive">
+    Campaign has been archived and is no longer active.
+  </Step>
+  <Step title="Failed" icon="x">
+    Campaign failed due to an error.
   </Step>
 </Steps>
 
 ### Activate a Campaign
 
+Update the campaign status to `active` using the PUT endpoint:
+
 ```javascript
 await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/campaigns/${campaignId}/activate`,
+  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/campaigns/${campaignId}`,
   {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${API_KEY}` }
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({ status: 'active' })
   }
 );
 ```
 
 ### Pause a Campaign
 
+Update the campaign status to `paused` using the PUT endpoint:
+
 ```javascript
 await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/campaigns/${campaignId}/pause`,
+  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/campaigns/${campaignId}`,
   {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${API_KEY}` }
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({ status: 'paused' })
   }
 );
 ```
@@ -424,7 +436,7 @@ const response = await fetch(
 );
 
 const result = await response.json();
-console.log(`Triggered for ${result.recipients_count} users`);
+console.log(`Triggered for ${result.people_queued} users`);
 ```
 
 ```python
@@ -456,19 +468,17 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/campaigns/
 ```
 </CodeGroup>
 
-## Message Templates
+## Templates & Variables
 
-Campaign messages support personalization with Handlebars-style templates:
+Campaigns reference templates by `template_id` and use `variables` for personalization with Handlebars-style syntax:
 
 ```json
 {
-  "template": {
-    "title": "Hi {{first_name}}!",
-    "body": "Your order #{{order_id}} has shipped!",
-    "data": {
-      "order_id": "{{order_id}}",
-      "action": "track_order"
-    }
+  "template_id": "tmpl_order_shipped",
+  "subject": "Hi {{first_name}}!",
+  "variables": {
+    "first_name": "{{first_name}}",
+    "order_id": "{{order_id}}"
   }
 }
 ```
@@ -504,15 +514,14 @@ Provide fallbacks for missing data:
       "trigger_type": "event",
       "trigger_config": {
         "event_name": "signed_up",
-        "delay_seconds": 300
+        "delay_minutes": 5
       },
-      "messages": [{
-        "type": "push",
-        "template": {
-          "title": "Welcome to Acme!",
-          "body": "Hi {{first_name}}, we're excited to have you!"
-        }
-      }]
+      "template_id": "tmpl_welcome",
+      "subject": "Welcome to Acme!",
+      "variables": {
+        "first_name": "{{first_name}}"
+      },
+      "segments": ["all_users"]
     }
     ```
   </Expandable>
@@ -525,16 +534,12 @@ Provide fallbacks for missing data:
       "trigger_type": "event",
       "trigger_config": {
         "event_name": "cart_updated",
-        "delay_seconds": 3600,
-        "cancel_on_event": "purchase_completed"
+        "delay_minutes": 60
       },
-      "messages": [{
-        "type": "push",
-        "template": {
-          "title": "You left something behind!",
-          "body": "Complete your purchase before it's gone."
-        }
-      }]
+      "template_id": "tmpl_abandoned_cart",
+      "subject": "You left something behind!",
+      "variables": {},
+      "segments": ["active_shoppers"]
     }
     ```
   </Expandable>
@@ -546,16 +551,14 @@ Provide fallbacks for missing data:
       "name": "Weekly Digest",
       "trigger_type": "schedule",
       "trigger_config": {
-        "cron": "0 9 * * MON",
+        "schedule_type": "cron",
+        "cron_expression": "0 9 * * MON",
         "timezone": "America/New_York"
       },
-      "messages": [{
-        "type": "push",
-        "template": {
-          "title": "Your Weekly Summary",
-          "body": "See what happened this week!"
-        }
-      }]
+      "template_id": "tmpl_weekly_digest",
+      "subject": "Your Weekly Summary",
+      "variables": {},
+      "segments": ["all_users"]
     }
     ```
   </Expandable>
@@ -572,13 +575,10 @@ Provide fallbacks for missing data:
         "time": "10:00",
         "timezone_attribute": "timezone"
       },
-      "messages": [{
-        "type": "push",
-        "template": {
-          "title": "Your trial ends soon!",
-          "body": "Upgrade now to keep your data."
-        }
-      }]
+      "template_id": "tmpl_trial_expiration",
+      "subject": "Your trial ends soon!",
+      "variables": {},
+      "segments": ["trial_users"]
     }
     ```
   </Expandable>
