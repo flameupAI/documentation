@@ -89,15 +89,15 @@ class Flameup {
     return response.json();
   }
 
-  // Transactional messaging
-  async sendTransactional(userId, templateId, channel, variables = {}) {
-    return this.request('/transactional/send', {
+  // Push notifications
+  async sendPush(personId, title, body, options = {}) {
+    return this.request('/push/send', {
       method: 'POST',
       body: JSON.stringify({
-        user_id: userId,
-        template_id: templateId,
-        channel,
-        variables
+        person_id: personId,
+        title,
+        body,
+        ...options
       })
     });
   }
@@ -184,15 +184,15 @@ class Flameup:
             }
         ).json()
 
-    def send_transactional(self, user_id, template_id, channel, variables=None):
-        """Send a transactional message (email, sms, or push)."""
+    def send_push(self, person_id, title, body, **options):
+        """Send a push notification."""
         return self.session.post(
-            self._url('/transactional/send'),
+            self._url('/push/send'),
             json={
-                'user_id': user_id,
-                'template_id': template_id,
-                'channel': channel,
-                'variables': variables or {}
+                'person_id': person_id,
+                'title': title,
+                'body': body,
+                **options
             }
         ).json()
 

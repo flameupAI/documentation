@@ -67,9 +67,9 @@
                 "icon": "send"
               },
               {
-                "title": "Transactional",
+                "title": "Messaging APIs",
                 "path": "transactional",
-                "icon": "zap"
+                "icon": "bell"
               }
             ]
           },

@@ -276,15 +276,15 @@ register_device(
 ```
 </CodeGroup>
 
-## Step 5: Send a Transactional Message
+## Step 5: Send a Push Notification
 
-Send a one-off message to a user (e.g., order confirmation):
+Send a push notification to a user (e.g., order confirmation):
 
 <CodeGroup>
 ```javascript
-async function sendTransactional(userId, templateId, channel, variables) {
+async function sendPush(personId, title, body, options = {}) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/transactional/send`,
+    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
     {
       method: 'POST',
       headers: {
@@ -292,10 +292,10 @@ async function sendTransactional(userId, templateId, channel, variables) {
         'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
-        user_id: userId,
-        template_id: templateId,
-        channel: channel,  // 'email', 'sms', or 'push'
-        variables: variables
+        person_id: personId,
+        title: title,
+        body: body,
+        ...options
       })
     }
   );
@@ -303,39 +303,41 @@ async function sendTransactional(userId, templateId, channel, variables) {
   return response.json();
 }
 
-// Send order confirmation via push
-await sendTransactional('user_12345', 'order_confirmation', 'push', {
-  order_id: 'order_789',
-  total: '$99.99',
-  items: '2 items'
-});
+// Send order confirmation (personId is the Flameup person ID from Step 2)
+await sendPush('person_abc123',
+  'Order Confirmed!',
+  'Your order #order_789 is confirmed. Total: $99.99',
+  { action_url: 'myapp://orders/order_789' }
+);
 ```
 
 ```python
-def send_transactional(user_id, template_id, channel, variables):
+def send_push(person_id, title, body, **options):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
+        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
         },
         json={
-            'user_id': user_id,
-            'template_id': template_id,
-            'channel': channel,  # 'email', 'sms', or 'push'
-            'variables': variables
+            'person_id': person_id,
+            'title': title,
+            'body': body,
+            **options
         }
     )
     return response.json()
 
-# Send order confirmation via push
-send_transactional('user_12345', 'order_confirmation', 'push', {
-    'order_id': 'order_789',
-    'total': '$99.99',
-    'items': '2 items'
-})
+# Send order confirmation (person_id is the Flameup person ID from Step 2)
+send_push('person_abc123',
+    'Order Confirmed!',
+    'Your order #order_789 is confirmed. Total: $99.99',
+    action_url='myapp://orders/order_789'
+)
 ```
 </CodeGroup>
+
+<Callout kind="info">The Push API requires the Flameup `person_id` (UUID returned when creating/identifying a user), not your external user ID.</Callout>
 
 ## Verification
 
