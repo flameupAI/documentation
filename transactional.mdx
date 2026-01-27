@@ -33,13 +33,13 @@ Transactional messages are one-off, API-triggered notifications sent in response
 
 ## Send a Transactional Message
 
-Send a push notification to a specific user.
+Send a message to a specific user via email, SMS, or push notification.
 
 **Endpoint:** `POST /api/v1/workspaces/{workspace_id}/transactional/send`
 
 <CodeGroup>
 ```javascript
-async function sendTransactional(userId, templateId, data) {
+async function sendTransactional(userId, templateId, channel, variables) {
   const response = await fetch(
     `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/transactional/send`,
     {
@@ -51,7 +51,8 @@ async function sendTransactional(userId, templateId, data) {
       body: JSON.stringify({
         user_id: userId,
         template_id: templateId,
-        data: data
+        channel: channel,  // 'email', 'sms', or 'push'
+        variables: variables
       })
     }
   );
@@ -59,8 +60,8 @@ async function sendTransactional(userId, templateId, data) {
   return response.json();
 }
 
-// Example: Order confirmation
-await sendTransactional('user_123', 'order_confirmation', {
+// Example: Order confirmation via push
+await sendTransactional('user_123', 'order_confirmation', 'push', {
   order_id: 'ORD-12345',
   total: '$99.99',
   items_count: 3,
@@ -69,7 +70,7 @@ await sendTransactional('user_123', 'order_confirmation', {
 ```
 
 ```python
-def send_transactional(user_id, template_id, data):
+def send_transactional(user_id, template_id, channel, variables):
     response = requests.post(
         f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
         headers={
@@ -79,13 +80,14 @@ def send_transactional(user_id, template_id, data):
         json={
             'user_id': user_id,
             'template_id': template_id,
-            'data': data
+            'channel': channel,  # 'email', 'sms', or 'push'
+            'variables': variables
         }
     )
     return response.json()
 
-# Example: Order confirmation
-send_transactional('user_123', 'order_confirmation', {
+# Example: Order confirmation via push
+send_transactional('user_123', 'order_confirmation', 'push', {
     'order_id': 'ORD-12345',
     'total': '$99.99',
     'items_count': 3,
@@ -100,7 +102,8 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/transactio
   -d '{
     "user_id": "user_123",
     "template_id": "order_confirmation",
-    "data": {
+    "channel": "push",
+    "variables": {
       "order_id": "ORD-12345",
       "total": "$99.99",
       "items_count": 3,
@@ -115,78 +118,21 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/transactio
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `user_id` | string | Yes | The user's external_id or Flameup person_id |
-| `template_id` | string | Yes* | ID of a pre-defined template |
-| `template` | object | Yes* | Inline template (if no template_id) |
-| `data` | object | No | Variables for template personalization |
-| `platform` | string | No | Target platform: `ios`, `android`, `web`, or `all` |
-
-*Either `template_id` or `template` is required.
-
-### Inline Templates
-
-Instead of using a pre-defined template, you can provide the message inline:
-
-<CodeGroup>
-```javascript
-await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/transactional/send`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      user_id: 'user_123',
-      template: {
-        title: 'Your order has shipped!',
-        body: 'Order #{{order_id}} is on its way. Track it now.',
-        data: {
-          action: 'track_order',
-          order_id: '{{order_id}}'
-        }
-      },
-      data: {
-        order_id: 'ORD-12345'
-      }
-    })
-  }
-);
-```
-
-```python
-requests.post(
-    f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
-    headers={
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {API_KEY}'
-    },
-    json={
-        'user_id': 'user_123',
-        'template': {
-            'title': 'Your order has shipped!',
-            'body': 'Order #{{order_id}} is on its way. Track it now.',
-            'data': {
-                'action': 'track_order',
-                'order_id': '{{order_id}}'
-            }
-        },
-        'data': {
-            'order_id': 'ORD-12345'
-        }
-    }
-)
-```
-</CodeGroup>
+| `template_id` | string | Yes | ID of a pre-defined template |
+| `channel` | string | Yes | Channel to send via: `email`, `sms`, or `push` |
+| `variables` | object | No | Variables for template personalization |
+| `subject` | string | No | Override the template subject (email only) |
+| `body` | string | No | Override the template body |
+| `priority` | integer | No | Message priority (0=low, 1=normal, 2=high, 3=urgent) |
 
 **Response:**
 
 ```json
 {
-  "success": true,
-  "message_id": "msg_550e8400e29b41d4a716446655440000",
-  "delivered_to": ["ios", "android"],
-  "devices_count": 2
+  "id": "msg_550e8400e29b41d4a716446655440000",
+  "status": "sent",
+  "channel": "push",
+  "created_at": "2024-01-15T10:30:00Z"
 }
 ```
 
@@ -196,241 +142,85 @@ requests.post(
   <Tab title="Order Updates" icon="package">
     ```javascript
     // Order confirmation
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Order Confirmed!',
-        body: 'Thanks for your order #{{order_id}}. Total: {{total}}',
-        data: { action: 'view_order', order_id: '{{order_id}}' }
-      },
-      data: { order_id: 'ORD-12345', total: '$99.99' }
+    await sendTransactional('user_123', 'order_confirmation', 'push', {
+      order_id: 'ORD-12345',
+      total: '$99.99'
     });
 
     // Shipping notification
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Your order has shipped!',
-        body: 'Track your package: {{tracking_number}}',
-        data: { action: 'track', tracking: '{{tracking_number}}' }
-      },
-      data: { tracking_number: '1Z999AA10123456784' }
+    await sendTransactional('user_123', 'order_shipped', 'push', {
+      tracking_number: '1Z999AA10123456784'
     });
 
     // Delivered notification
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Package delivered!',
-        body: 'Your order #{{order_id}} has been delivered.',
-        data: { action: 'rate_order', order_id: '{{order_id}}' }
-      },
-      data: { order_id: 'ORD-12345' }
+    await sendTransactional('user_123', 'order_delivered', 'push', {
+      order_id: 'ORD-12345'
     });
     ```
   </Tab>
   <Tab title="Account Security" icon="shield">
     ```javascript
     // Password reset
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Password Reset Request',
-        body: 'Tap to reset your password. Link expires in 1 hour.',
-        data: { action: 'reset_password', token: '{{reset_token}}' }
-      },
-      data: { reset_token: 'abc123xyz' }
+    await sendTransactional('user_123', 'password_reset', 'email', {
+      reset_token: 'abc123xyz'
     });
 
     // New login alert
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'New Login Detected',
-        body: 'New sign-in from {{device}} in {{location}}',
-        data: { action: 'review_security' }
-      },
-      data: { device: 'Chrome on Windows', location: 'New York, US' }
+    await sendTransactional('user_123', 'new_login_alert', 'push', {
+      device: 'Chrome on Windows',
+      location: 'New York, US'
     });
 
     // 2FA code
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Your verification code',
-        body: 'Your code is {{code}}. It expires in 5 minutes.',
-        data: {}
-      },
-      data: { code: '847291' }
+    await sendTransactional('user_123', 'verification_code', 'sms', {
+      code: '847291'
     });
     ```
   </Tab>
   <Tab title="Payments" icon="credit-card">
     ```javascript
     // Payment successful
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Payment Received',
-        body: 'We received your payment of {{amount}}. Thank you!',
-        data: { action: 'view_receipt', payment_id: '{{payment_id}}' }
-      },
-      data: { amount: '$49.99', payment_id: 'pay_abc123' }
+    await sendTransactional('user_123', 'payment_received', 'push', {
+      amount: '$49.99',
+      payment_id: 'pay_abc123'
     });
 
     // Payment failed
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Payment Failed',
-        body: 'Your payment of {{amount}} was declined. Please update your card.',
-        data: { action: 'update_payment' }
-      },
-      data: { amount: '$49.99' }
+    await sendTransactional('user_123', 'payment_failed', 'push', {
+      amount: '$49.99'
     });
 
     // Subscription renewal
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'Subscription Renewed',
-        body: 'Your {{plan}} plan has been renewed for {{amount}}/month.',
-        data: { action: 'view_subscription' }
-      },
-      data: { plan: 'Premium', amount: '$19.99' }
+    await sendTransactional('user_123', 'subscription_renewed', 'email', {
+      plan: 'Premium',
+      amount: '$19.99'
     });
     ```
   </Tab>
   <Tab title="Social" icon="users">
     ```javascript
     // New follower
-    await sendTransactional('user_123', null, {
-      template: {
-        title: '{{follower_name}} is now following you',
-        body: 'Tap to view their profile',
-        data: { action: 'view_profile', user_id: '{{follower_id}}' }
-      },
-      data: { follower_name: 'John Doe', follower_id: 'user_456' }
+    await sendTransactional('user_123', 'new_follower', 'push', {
+      follower_name: 'John Doe',
+      follower_id: 'user_456'
     });
 
     // New message
-    await sendTransactional('user_123', null, {
-      template: {
-        title: 'New message from {{sender_name}}',
-        body: '{{message_preview}}',
-        data: { action: 'open_chat', chat_id: '{{chat_id}}' }
-      },
-      data: {
-        sender_name: 'Jane',
-        message_preview: 'Hey, are you free for lunch?',
-        chat_id: 'chat_789'
-      }
+    await sendTransactional('user_123', 'new_message', 'push', {
+      sender_name: 'Jane',
+      message_preview: 'Hey, are you free for lunch?',
+      chat_id: 'chat_789'
     });
 
     // Comment on post
-    await sendTransactional('user_123', null, {
-      template: {
-        title: '{{commenter_name}} commented on your post',
-        body: '"{{comment_preview}}"',
-        data: { action: 'view_post', post_id: '{{post_id}}' }
-      },
-      data: {
-        commenter_name: 'Mike',
-        comment_preview: 'Great point!',
-        post_id: 'post_456'
-      }
+    await sendTransactional('user_123', 'new_comment', 'push', {
+      commenter_name: 'Mike',
+      comment_preview: 'Great point!',
+      post_id: 'post_456'
     });
     ```
   </Tab>
 </Tabs>
-
-## Targeting Specific Platforms
-
-By default, transactional messages are sent to all of a user's registered devices. You can target specific platforms:
-
-<CodeGroup>
-```javascript
-// Send only to iOS devices
-await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/transactional/send`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      user_id: 'user_123',
-      platform: 'ios',  // or 'android', 'web', 'all'
-      template: {
-        title: 'iOS Only Notification',
-        body: 'This goes to iOS devices only'
-      }
-    })
-  }
-);
-```
-
-```bash
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/transactional/send" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your_api_key" \
-  -d '{
-    "user_id": "user_123",
-    "platform": "ios",
-    "template": {
-      "title": "iOS Only Notification",
-      "body": "This goes to iOS devices only"
-    }
-  }'
-```
-</CodeGroup>
-
-## Push Notification Options
-
-Customize the push notification behavior:
-
-```javascript
-await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/transactional/send`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      user_id: 'user_123',
-      template: {
-        title: 'Important Update',
-        body: 'Please review your account',
-
-        // iOS-specific options
-        ios: {
-          badge: 1,
-          sound: 'default',
-          category: 'ACCOUNT_ALERT'
-        },
-
-        // Android-specific options
-        android: {
-          channel_id: 'important_updates',
-          priority: 'high',
-          icon: 'ic_notification'
-        },
-
-        // Custom data payload
-        data: {
-          action: 'review_account',
-          deep_link: '/account/security'
-        }
-      }
-    })
-  }
-);
-```
-
-### Platform-Specific Options
-
-| Platform | Option | Description |
-|----------|--------|-------------|
-| iOS | `badge` | App badge count |
-| iOS | `sound` | Notification sound |
-| iOS | `category` | Action category for interactive notifications |
-| Android | `channel_id` | Notification channel |
-| Android | `priority` | `high`, `normal`, or `low` |
-| Android | `icon` | Notification icon resource |
 
 ## Error Handling
 
@@ -442,7 +232,7 @@ await fetch(
 {
   "success": false,
   "error": {
-    "code": "user_not_found",
+    "type": "user_not_found",
     "message": "No user found with the provided ID"
   }
 }
@@ -454,7 +244,7 @@ await fetch(
 {
   "success": false,
   "error": {
-    "code": "no_devices",
+    "type": "no_devices",
     "message": "User has no registered devices for the target platform"
   }
 }
@@ -466,7 +256,7 @@ await fetch(
 {
   "success": false,
   "error": {
-    "code": "template_not_found",
+    "type": "template_not_found",
     "message": "Template 'order_confirmation' not found"
   }
 }
@@ -475,10 +265,10 @@ await fetch(
 ### Handling in Code
 
 ```javascript
-async function sendNotification(userId, template, data) {
+async function sendNotification(userId, templateId, channel, variables) {
   try {
     const response = await fetch(
-      `${BASE_URL}/transactional/send`,
+      `${BASE_URL}/workspaces/${WORKSPACE_ID}/transactional/send`,
       {
         method: 'POST',
         headers: {
@@ -487,16 +277,17 @@ async function sendNotification(userId, template, data) {
         },
         body: JSON.stringify({
           user_id: userId,
-          template,
-          data
+          template_id: templateId,
+          channel: channel,
+          variables: variables
         })
       }
     );
 
     const result = await response.json();
 
-    if (!result.success) {
-      switch (result.error.code) {
+    if (!result.id) {
+      switch (result.error?.type) {
         case 'user_not_found':
           console.log('User not found in Flameup');
           break;
@@ -504,7 +295,7 @@ async function sendNotification(userId, template, data) {
           console.log('User has no push-enabled devices');
           break;
         default:
-          console.error('Push failed:', result.error.message);
+          console.error('Send failed:', result.error?.message);
       }
       return null;
     }

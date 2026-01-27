@@ -10,15 +10,15 @@ Flameup implements rate limiting to ensure fair usage and platform stability. Ra
 ## Rate Limit Tiers
 
 <Columns cols={3}>
-  <Card title="Standard" icon="zap">
-    **1,000 requests/minute**
+  <Card title="Public" icon="globe">
+    **75 requests/minute**
 
-    Default for all API keys
+    Unauthenticated endpoints
   </Card>
-  <Card title="High Volume" icon="trending-up">
-    **10,000 requests/minute**
+  <Card title="Authenticated" icon="key">
+    **120 requests/minute**
 
-    For high-traffic applications
+    With valid API key
   </Card>
   <Card title="Enterprise" icon="building">
     **Custom limits**
@@ -27,16 +27,16 @@ Flameup implements rate limiting to ensure fair usage and platform stability. Ra
   </Card>
 </Columns>
 
-## Limits by Endpoint
+## Current Rate Limits
 
-| Endpoint Category | Limit | Window |
-|-------------------|-------|--------|
-| People (read) | 1,000/min | Per API key |
-| People (write) | 500/min | Per API key |
-| Events (write) | 5,000/min | Per API key |
-| Campaigns | 100/min | Per API key |
-| Transactional | 1,000/min | Per API key |
-| Batch operations | 50/min | Per API key |
+Rate limits are applied globally per API key, not per endpoint:
+
+| Authentication | Limit | Window |
+|----------------|-------|--------|
+| Public (no API key) | 75/min | Per IP |
+| Authenticated (API key) | 120/min | Per API key |
+
+<Callout kind="info">All endpoints share the same rate limit pool. Plan your request patterns accordingly.</Callout>
 
 ## Rate Limit Headers
 
@@ -60,18 +60,12 @@ When you exceed the rate limit, you'll receive a `429 Too Many Requests` respons
 
 ```json
 {
-  "error": {
-    "code": "rate_limit_exceeded",
-    "message": "Rate limit exceeded. Retry after 60 seconds.",
-    "details": {
-      "retry_after": 60,
-      "limit": 1000,
-      "remaining": 0,
-      "reset_at": "2024-01-15T10:31:00Z"
-    }
-  }
+  "error": "Rate limit exceeded",
+  "message": "Too many requests. Please try again later."
 }
 ```
+
+The response headers will contain timing information for when you can retry.
 
 ### Implementing Backoff
 
@@ -110,9 +104,10 @@ class FlameupClient {
     ) * 1000;
 
     if (response.status === 429) {
-      const error = await response.json();
-      const retryAfter = error.error?.details?.retry_after || 60;
-      await this.sleep(retryAfter * 1000);
+      // Use X-RateLimit-Reset header or default wait time
+      const resetTime = parseInt(response.headers.get('X-RateLimit-Reset') || '0') * 1000;
+      const waitTime = resetTime > Date.now() ? resetTime - Date.now() : 60000;
+      await this.sleep(waitTime);
       return this.request(endpoint, options); // Retry
     }
 
@@ -158,9 +153,10 @@ class FlameupClient:
         )
 
         if response.status_code == 429:
-            error = response.json()
-            retry_after = error.get('error', {}).get('details', {}).get('retry_after', 60)
-            time.sleep(retry_after)
+            # Use X-RateLimit-Reset header or default wait time
+            reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
+            wait_time = max(reset_time - time.time(), 60) if reset_time else 60
+            time.sleep(wait_time)
             return self.request(endpoint, method, **kwargs)  # Retry
 
         return response

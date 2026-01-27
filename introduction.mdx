@@ -69,8 +69,8 @@ Understanding these key concepts will help you get the most out of Flameup:
   <Expandable title="API Keys" default-open="false">
     API keys authenticate your requests and determine what actions you can perform.
 
-    - **Live keys**: For production use (`flare_live_...`)
-    - **Test keys**: For development and testing (`flare_test_...`)
+    - **Live keys**: For production use (`ws_live_{workspace}_{random}.{secret}`)
+    - **Test keys**: For development and testing (`ws_test_{workspace}_{random}.{secret}`)
     - **Permissions**: Granular control over read/write access
 
     See the [Authentication](/authentication) guide for details.
@@ -110,7 +110,7 @@ Here's a complete example showing how to identify a user and track an event:
 <CodeGroup>
 ```javascript
 // Initialize with your API key
-const API_KEY = 'flare_live_your_api_key_here';
+const API_KEY = 'ws_live_abc12345_abc123.your_secret_here';
 const WORKSPACE_ID = 'your_workspace_id';
 const BASE_URL = 'https://api.flameup.ai/api/v1';
 
@@ -142,7 +142,7 @@ console.log('User created:', user.id);
 ```python
 import requests
 
-API_KEY = 'flare_live_your_api_key_here'
+API_KEY = 'ws_live_abc12345_abc123.your_secret_here'
 WORKSPACE_ID = 'your_workspace_id'
 BASE_URL = 'https://api.flameup.ai/api/v1'
 
@@ -172,7 +172,7 @@ print(f"User created: {user['id']}")
 # Identify a user with cURL
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer flare_live_your_api_key_here" \
+  -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
   -d '{
     "userId": "user_123",
     "email": "jane@example.com",

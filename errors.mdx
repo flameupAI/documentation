@@ -5,20 +5,20 @@ description: Understanding and handling Flameup API errors
 
 ## Error Response Format
 
-All Flameup API errors follow a consistent format:
+Flameup API errors use the following format:
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "error_code",
-    "message": "Human-readable error message",
-    "details": {
-      // Additional context (optional)
-    }
-  }
+    "type": "ERROR_TYPE",
+    "message": "Human-readable error message"
+  },
+  "request_id": "req_abc123"
 }
 ```
+
+<Callout kind="info">Some endpoints may return a simplified format: `{"error": "message", "message": "details"}`. Check the specific endpoint documentation.</Callout>
 
 ## HTTP Status Codes
 
@@ -253,21 +253,13 @@ Flameup uses standard HTTP status codes:
 
     ```json
     {
-      "error": {
-        "code": "rate_limit_exceeded",
-        "message": "Rate limit exceeded. Retry after 60 seconds.",
-        "details": {
-          "retry_after": 60,
-          "limit": 1000,
-          "remaining": 0,
-          "reset_at": "2024-01-15T10:31:00Z"
-        }
-      }
+      "error": "Rate limit exceeded",
+      "message": "Too many requests. Please try again later."
     }
     ```
 
     **Solutions:**
-    - Wait for the `retry_after` period
+    - Check the `X-RateLimit-Reset` header for when to retry
     - Implement exponential backoff
     - Consider upgrading your plan for higher limits
   </Expandable>
@@ -295,9 +287,10 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
       // Don't retry client errors (except rate limits)
       if (response.status >= 400 && response.status < 500) {
         if (response.status === 429) {
-          // Rate limited - wait and retry
-          const retryAfter = error.error?.details?.retry_after || 60;
-          await sleep(retryAfter * 1000);
+          // Rate limited - wait and retry using header
+          const resetTime = parseInt(response.headers.get('X-RateLimit-Reset') || '0') * 1000;
+          const waitTime = resetTime > Date.now() ? resetTime - Date.now() : 60000;
+          await sleep(waitTime);
           continue;
         }
         throw new FlameupError(error);
@@ -343,8 +336,10 @@ def fetch_with_retry(url, options, max_retries=3):
             # Don't retry client errors (except rate limits)
             if 400 <= response.status_code < 500:
                 if response.status_code == 429:
-                    retry_after = error.get('error', {}).get('details', {}).get('retry_after', 60)
-                    time.sleep(retry_after)
+                    # Use X-RateLimit-Reset header
+                    reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
+                    wait_time = max(reset_time - time.time(), 60) if reset_time else 60
+                    time.sleep(wait_time)
                     continue
                 raise FlameupError(error)
 
