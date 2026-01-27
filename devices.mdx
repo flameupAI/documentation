@@ -52,19 +52,22 @@ A device token in Flameup has the following structure:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `person_id` | UUID | Yes | The person this device belongs to |
-| `device_token` | string | Yes | FCM/APNs token from the device |
+| `token` | string | Yes | FCM/APNs token from the device |
 | `platform` | string | Yes | `ios`, `android`, or `web` |
 | `device_name` | string | No | Human-readable device name |
 | `device_model` | string | No | Device model identifier |
 | `os_version` | string | No | Operating system version |
 | `app_version` | string | No | Your app's version |
 
+<Callout kind="tip">The `person_id` is passed in the URL path, not in the request body.</Callout>
+
 ## Register a Device
 
 Register a device token to enable push notifications for a user.
 
-**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/devices`
+**Endpoint:** `POST /api/v1/people/{person_id}/devices`
+
+<Callout kind="info">The workspace is automatically determined from your API key, so you don't need to include it in the URL.</Callout>
 
 <Tabs>
   <Tab title="iOS" icon="smartphone">
@@ -72,16 +75,15 @@ Register a device token to enable push notifications for a user.
     // After obtaining FCM token in your iOS app
     async function registerIOSDevice(personId, fcmToken, deviceInfo) {
       const response = await fetch(
-        `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices`,
+        `https://api.flameup.ai/api/v1/people/${personId}/devices`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': `Bearer ${API_KEY}`
           },
           body: JSON.stringify({
-            person_id: personId,
-            device_token: fcmToken,
+            token: fcmToken,
             platform: 'ios',
             device_name: deviceInfo.name,        // e.g., "John's iPhone"
             device_model: deviceInfo.model,      // e.g., "iPhone16,1"
@@ -112,16 +114,15 @@ Register a device token to enable push notifications for a user.
     // After obtaining FCM token in your Android app
     async function registerAndroidDevice(personId, fcmToken, deviceInfo) {
       const response = await fetch(
-        `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices`,
+        `https://api.flameup.ai/api/v1/people/${personId}/devices`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': `Bearer ${API_KEY}`
           },
           body: JSON.stringify({
-            person_id: personId,
-            device_token: fcmToken,
+            token: fcmToken,
             platform: 'android',
             device_name: deviceInfo.name,
             device_model: deviceInfo.model,      // e.g., "Pixel 8 Pro"
@@ -151,16 +152,15 @@ Register a device token to enable push notifications for a user.
     // After obtaining FCM token in your web app
     async function registerWebDevice(personId, fcmToken) {
       const response = await fetch(
-        `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices`,
+        `https://api.flameup.ai/api/v1/people/${personId}/devices`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': `Bearer ${API_KEY}`
           },
           body: JSON.stringify({
-            person_id: personId,
-            device_token: fcmToken,
+            token: fcmToken,
             platform: 'web',
             device_name: navigator.userAgent.includes('Chrome')
               ? 'Chrome Browser'
@@ -191,12 +191,11 @@ Register a device token to enable push notifications for a user.
 
 <CodeGroup>
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices" \
+curl -X POST "https://api.flameup.ai/api/v1/people/{person_id}/devices" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
-    "person_id": "550e8400-e29b-41d4-a716-446655440001",
-    "device_token": "fMhT8K9x...your_fcm_token",
+    "token": "fMhT8K9x...your_fcm_token",
     "platform": "ios",
     "device_name": "iPhone 15 Pro",
     "device_model": "iPhone16,1",
@@ -207,14 +206,13 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices" \
 
 ```python
 response = requests.post(
-    f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/devices',
+    f'https://api.flameup.ai/api/v1/people/{person_id}/devices',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
-        'person_id': person_id,
-        'device_token': fcm_token,
+        'token': fcm_token,
         'platform': 'ios',
         'device_name': 'iPhone 15 Pro',
         'device_model': 'iPhone16,1',
@@ -243,15 +241,14 @@ device = response.json()
 
 ## List Devices
 
-Retrieve all devices for a workspace or person.
+Retrieve all devices for a person.
 
-**Endpoint:** `GET /api/v1/workspaces/{workspace_id}/devices`
+**Endpoint:** `GET /api/v1/people/{person_id}/devices`
 
 ### Query Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `person_id` | UUID | Filter by person |
 | `platform` | string | Filter by platform: `ios`, `android`, `web` |
 | `is_active` | boolean | Filter by active status |
 | `limit` | integer | Number of results (default 50, max 100) |
@@ -261,10 +258,10 @@ Retrieve all devices for a workspace or person.
 ```javascript
 // Get all devices for a user
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices?person_id=${personId}`,
+  `https://api.flameup.ai/api/v1/people/${personId}/devices`,
   {
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -275,17 +272,16 @@ console.log(`User has ${devices.length} registered devices`);
 
 ```python
 response = requests.get(
-    f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/devices',
-    headers={'X-API-Key': API_KEY},
-    params={'person_id': person_id}
+    f'https://api.flameup.ai/api/v1/people/{person_id}/devices',
+    headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
 devices = response.json()['devices']
 ```
 
 ```bash
-curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices?person_id={person_id}" \
-  -H "X-API-Key: your_api_key"
+curl "https://api.flameup.ai/api/v1/people/{person_id}/devices" \
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 
@@ -293,19 +289,24 @@ curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices?person_id=
 
 Update device information (e.g., when the app version changes).
 
-**Endpoint:** `PUT /api/v1/workspaces/{workspace_id}/devices/{device_id}`
+<Callout kind="info">To update device info, re-register the device with the new information. The device will be matched by token and updated.</Callout>
+
+Simply call the register endpoint again with the same token and updated fields:
 
 <CodeGroup>
 ```javascript
+// Re-register with updated info
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices/${deviceId}`,
+  `https://api.flameup.ai/api/v1/people/${personId}/devices`,
   {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
+      token: existingToken,
+      platform: 'ios',
       app_version: '2.2.0',
       os_version: '17.3'
     })
@@ -314,13 +315,16 @@ const response = await fetch(
 ```
 
 ```python
-response = requests.put(
-    f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/devices/{device_id}',
+# Re-register with updated info
+response = requests.post(
+    f'https://api.flameup.ai/api/v1/people/{person_id}/devices',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
+        'token': existing_token,
+        'platform': 'ios',
         'app_version': '2.2.0',
         'os_version': '17.3'
     }
@@ -328,10 +332,10 @@ response = requests.put(
 ```
 
 ```bash
-curl -X PUT "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices/{device_id}" \
+curl -X POST "https://api.flameup.ai/api/v1/people/{person_id}/devices" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
-  -d '{"app_version": "2.2.0", "os_version": "17.3"}'
+  -H "Authorization: Bearer your_api_key" \
+  -d '{"token": "existing_fcm_token", "platform": "ios", "app_version": "2.2.0", "os_version": "17.3"}'
 ```
 </CodeGroup>
 
@@ -339,16 +343,16 @@ curl -X PUT "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices/{de
 
 Remove a device token (e.g., when user logs out or uninstalls).
 
-**Endpoint:** `DELETE /api/v1/workspaces/{workspace_id}/devices/{device_id}`
+**Endpoint:** `DELETE /api/v1/people/{person_id}/devices/{token}`
 
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices/${deviceId}`,
+  `https://api.flameup.ai/api/v1/people/${personId}/devices/${encodeURIComponent(deviceToken)}`,
   {
     method: 'DELETE',
     headers: {
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     }
   }
 );
@@ -359,15 +363,17 @@ if (response.ok) {
 ```
 
 ```python
+import urllib.parse
+
 response = requests.delete(
-    f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/devices/{device_id}',
-    headers={'X-API-Key': API_KEY}
+    f'https://api.flameup.ai/api/v1/people/{person_id}/devices/{urllib.parse.quote(device_token, safe="")}',
+    headers={'Authorization': f'Bearer {API_KEY}'}
 )
 ```
 
 ```bash
-curl -X DELETE "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices/{device_id}" \
-  -H "X-API-Key: your_api_key"
+curl -X DELETE "https://api.flameup.ai/api/v1/people/{person_id}/devices/{device_token}" \
+  -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
 

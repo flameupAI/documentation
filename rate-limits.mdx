@@ -96,7 +96,7 @@ class FlameupClient {
     const response = await fetch(endpoint, {
       ...options,
       headers: {
-        'X-API-Key': this.apiKey,
+        'Authorization': `Bearer ${this.apiKey}`,
         ...options.headers
       }
     });
@@ -143,7 +143,7 @@ class FlameupClient:
                 time.sleep(wait_time)
 
         headers = kwargs.pop('headers', {})
-        headers['X-API-Key'] = self.api_key
+        headers['Authorization'] = f'Bearer {self.api_key}'
 
         response = requests.request(
             method, endpoint, headers=headers, **kwargs

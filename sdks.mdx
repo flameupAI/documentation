@@ -45,7 +45,7 @@ class Flameup {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey,
+        'Authorization': `Bearer ${this.apiKey}`,
         ...options.headers
       }
     });
@@ -71,17 +71,22 @@ class Flameup {
     return result.people[0] || null;
   }
 
-  // Events
-  async track(userId, event, properties = {}) {
-    return this.request('/events', {
+  // Events (uses /api/v1/track endpoint directly)
+  async track(externalId, event, parameters = {}) {
+    const response = await fetch('https://api.flameup.ai/api/v1/track', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`
+      },
       body: JSON.stringify({
-        userId,
+        external_id: externalId,
         event,
-        properties,
+        parameters,
         timestamp: new Date().toISOString()
       })
     });
+    return response.json();
   }
 
   // Push
@@ -118,7 +123,7 @@ import axios from 'axios';
 const flare = axios.create({
   baseURL: 'https://api.flameup.ai/api/v1',
   headers: {
-    'X-API-Key': 'flare_live_xxx'
+    'Authorization': 'Bearer flare_live_xxx'
   }
 });
 
@@ -129,11 +134,11 @@ await flare.post('/workspaces/ws_abc123/people', {
   traits: { first_name: 'Jane' }
 });
 
-// Track event
-await flare.post('/workspaces/ws_abc123/events', {
-  userId: 'user_123',
+// Track event (uses /track endpoint)
+await flare.post('/track', {
+  external_id: 'user_123',
   event: 'purchase_completed',
-  properties: { amount: 99.99 }
+  parameters: { amount: 99.99 }
 });
 ```
 
@@ -153,7 +158,7 @@ class Flameup:
         self.session = requests.Session()
         self.session.headers.update({
             'Content-Type': 'application/json',
-            'X-API-Key': api_key
+            'Authorization': f'Bearer {api_key}'
         })
 
     def _url(self, endpoint):
@@ -166,14 +171,14 @@ class Flameup:
             json={'userId': user_id, 'traits': traits or {}}
         ).json()
 
-    def track(self, user_id, event, properties=None):
-        """Track a user event."""
+    def track(self, external_id, event, parameters=None):
+        """Track a user event (uses /api/v1/track endpoint)."""
         return self.session.post(
-            self._url('/events'),
+            f'{self.base_url}/track',
             json={
-                'userId': user_id,
+                'external_id': external_id,
                 'event': event,
-                'properties': properties or {},
+                'parameters': parameters or {},
                 'timestamp': datetime.utcnow().isoformat() + 'Z'
             }
         ).json()
@@ -215,7 +220,7 @@ class AsyncFlameup:
         self.client = httpx.AsyncClient(
             headers={
                 'Content-Type': 'application/json',
-                'X-API-Key': api_key
+                'Authorization': f'Bearer {api_key}'
             }
         )
 
@@ -229,13 +234,13 @@ class AsyncFlameup:
         )
         return response.json()
 
-    async def track(self, user_id, event, properties=None):
+    async def track(self, external_id, event, parameters=None):
         response = await self.client.post(
-            self._url('/events'),
+            f'{self.base_url}/track',
             json={
-                'userId': user_id,
+                'external_id': external_id,
                 'event': event,
-                'properties': properties or {},
+                'parameters': parameters or {},
                 'timestamp': datetime.utcnow().isoformat() + 'Z'
             }
         )
@@ -276,7 +281,7 @@ class Flameup {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "userId": userId,
             "traits": traits
@@ -288,16 +293,16 @@ class Flameup {
         }
     }
 
-    func track(userId: String, event: String, properties: [String: Any] = [:]) async throws {
-        let url = URL(string: "\(baseURL)/workspaces/\(workspaceId)/events")!
+    func track(externalId: String, event: String, parameters: [String: Any] = [:]) async throws {
+        let url = URL(string: "\(baseURL)/track")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "userId": userId,
+            "external_id": externalId,
             "event": event,
-            "properties": properties,
+            "parameters": parameters,
             "timestamp": ISO8601DateFormatter().string(from: Date())
         ])
 
@@ -321,7 +326,7 @@ Task {
         "first_name": "Jane"
     ])
 
-    try await flare.track(userId: "user_123", event: "app_opened")
+    try await flare.track(externalId: "user_123", event: "app_opened")
 }
 ```
 
@@ -354,26 +359,26 @@ class Flameup(
             val request = Request.Builder()
                 .url("$baseUrl/workspaces/$workspaceId/people")
                 .post(body.toString().toRequestBody(jsonMediaType))
-                .header("X-API-Key", apiKey)
+                .header("Authorization", "Bearer $apiKey")
                 .build()
 
             client.newCall(request).execute()
         }
     }
 
-    suspend fun track(userId: String, event: String, properties: Map<String, Any> = emptyMap()) {
+    suspend fun track(externalId: String, event: String, parameters: Map<String, Any> = emptyMap()) {
         withContext(Dispatchers.IO) {
             val body = JSONObject().apply {
-                put("userId", userId)
+                put("external_id", externalId)
                 put("event", event)
-                put("properties", JSONObject(properties))
+                put("parameters", JSONObject(parameters))
                 put("timestamp", java.time.Instant.now().toString())
             }
 
             val request = Request.Builder()
-                .url("$baseUrl/workspaces/$workspaceId/events")
+                .url("$baseUrl/track")
                 .post(body.toString().toRequestBody(jsonMediaType))
-                .header("X-API-Key", apiKey)
+                .header("Authorization", "Bearer $apiKey")
                 .build()
 
             client.newCall(request).execute()
@@ -390,7 +395,7 @@ lifecycleScope.launch {
         "first_name" to "Jane"
     ))
 
-    flare.track("user_123", "app_opened")
+    flare.track(externalId = "user_123", event = "app_opened")
 }
 ```
 
@@ -406,14 +411,14 @@ export WORKSPACE_ID="ws_abc123"
 # Identify a user
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/$WORKSPACE_ID/people" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $FLARE_API_KEY" \
+  -H "Authorization: Bearer $FLARE_API_KEY" \
   -d '{"userId": "user_123", "email": "jane@example.com"}'
 
 # Track an event
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/$WORKSPACE_ID/events" \
+curl -X POST "https://api.flameup.ai/api/v1/track" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $FLARE_API_KEY" \
-  -d '{"userId": "user_123", "event": "test_event"}'
+  -H "Authorization: Bearer $FLARE_API_KEY" \
+  -d '{"external_id": "user_123", "event": "test_event"}'
 ```
 
 ## OpenAPI Specification

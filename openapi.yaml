@@ -5,7 +5,7 @@ info:
     The Flameup API enables you to manage user profiles, track events, and send push notifications.
 
     ## Authentication
-    All requests require an API key passed in the `X-API-Key` header.
+    All requests require an API key passed in the `Authorization` header with the `Bearer` prefix.
 
     ## Base URL
     ```
@@ -23,7 +23,7 @@ servers:
     description: Production server
 
 security:
-  - ApiKeyAuth: []
+  - BearerAuth: []
 
 tags:
   - name: People
@@ -702,11 +702,10 @@ paths:
 
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: Your Flameup API key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Your Flameup API key (passed as Bearer token)
 
   parameters:
     WorkspaceId:

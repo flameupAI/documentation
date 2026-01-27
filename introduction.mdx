@@ -121,7 +121,7 @@ const response = await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       userId: 'user_123',
@@ -151,7 +151,7 @@ response = requests.post(
     f'{BASE_URL}/workspaces/{WORKSPACE_ID}/people',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'userId': 'user_123',
@@ -172,7 +172,7 @@ print(f"User created: {user['id']}")
 # Identify a user with cURL
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: flare_live_your_api_key_here" \
+  -H "Authorization: Bearer flare_live_your_api_key_here" \
   -d '{
     "userId": "user_123",
     "email": "jane@example.com",

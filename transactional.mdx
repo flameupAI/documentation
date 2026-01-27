@@ -46,7 +46,7 @@ async function sendTransactional(userId, templateId, data) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
         user_id: userId,
@@ -74,7 +74,7 @@ def send_transactional(user_id, template_id, data):
         f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
         headers={
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': f'Bearer {API_KEY}'
         },
         json={
             'user_id': user_id,
@@ -96,7 +96,7 @@ send_transactional('user_123', 'order_confirmation', {
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/transactional/send" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "user_id": "user_123",
     "template_id": "order_confirmation",
@@ -134,7 +134,7 @@ await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       user_id: 'user_123',
@@ -159,7 +159,7 @@ requests.post(
     f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
     headers={
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': f'Bearer {API_KEY}'
     },
     json={
         'user_id': 'user_123',
@@ -348,7 +348,7 @@ await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       user_id: 'user_123',
@@ -365,7 +365,7 @@ await fetch(
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/transactional/send" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your_api_key" \
+  -H "Authorization: Bearer your_api_key" \
   -d '{
     "user_id": "user_123",
     "platform": "ios",
@@ -388,7 +388,7 @@ await fetch(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
       user_id: 'user_123',
@@ -483,7 +483,7 @@ async function sendNotification(userId, template, data) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': API_KEY
+          'Authorization': `Bearer ${API_KEY}`
         },
         body: JSON.stringify({
           user_id: userId,

@@ -46,7 +46,7 @@ async function identifyUser(userId, email, traits) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
         userId: userId,
@@ -85,7 +85,7 @@ def identify_user(user_id, email, traits):
         f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people',
         headers={
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': f'Bearer {API_KEY}'
         },
         json={
             'userId': user_id,
@@ -113,7 +113,7 @@ print(f"User identified: {user['id']}")
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: flare_test_your_key_here" \
+  -H "Authorization: Bearer flare_test_your_key_here" \
   -d '{
     "userId": "user_12345",
     "email": "sarah@example.com",
@@ -135,19 +135,19 @@ Track user actions to understand behavior and trigger campaigns.
 
 <CodeGroup>
 ```javascript
-async function trackEvent(userId, eventName, properties) {
+async function trackEvent(externalId, eventName, parameters) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/events`,
+    'https://api.flameup.ai/api/v1/track',
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
-        userId: userId,
+        external_id: externalId,
         event: eventName,
-        properties: properties,
+        parameters: parameters,
         timestamp: new Date().toISOString()
       })
     }
@@ -170,17 +170,17 @@ console.log('Event tracked!');
 ```python
 from datetime import datetime
 
-def track_event(user_id, event_name, properties):
+def track_event(external_id, event_name, parameters):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/events',
+        'https://api.flameup.ai/api/v1/track',
         headers={
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': f'Bearer {API_KEY}'
         },
         json={
-            'userId': user_id,
+            'external_id': external_id,
             'event': event_name,
-            'properties': properties,
+            'parameters': parameters,
             'timestamp': datetime.utcnow().isoformat() + 'Z'
         }
     )
@@ -198,13 +198,13 @@ print('Event tracked!')
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/events" \
+curl -X POST "https://api.flameup.ai/api/v1/track" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: flare_test_your_key_here" \
+  -H "Authorization: Bearer flare_test_your_key_here" \
   -d '{
-    "userId": "user_12345",
+    "external_id": "user_12345",
     "event": "purchase_completed",
-    "properties": {
+    "parameters": {
       "order_id": "order_789",
       "amount": 99.99,
       "currency": "USD",
@@ -221,18 +221,17 @@ If your app uses push notifications, register the device token:
 
 <CodeGroup>
 ```javascript
-async function registerDevice(userId, deviceToken, platform) {
+async function registerDevice(personId, token, platform) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/devices`,
+    `https://api.flameup.ai/api/v1/people/${personId}/devices`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
-        user_id: userId,
-        device_token: deviceToken,
+        token: token,
         platform: platform, // 'ios', 'android', or 'web'
         device_name: 'iPhone 15 Pro',
         app_version: '2.1.0'
@@ -243,25 +242,24 @@ async function registerDevice(userId, deviceToken, platform) {
   return response.json();
 }
 
-// Register an iOS device
+// Register an iOS device (personId is the Flameup person ID from Step 2)
 await registerDevice(
-  'user_12345',
+  'person_abc123',
   'fcm_device_token_here',
   'ios'
 );
 ```
 
 ```python
-def register_device(user_id, device_token, platform):
+def register_device(person_id, token, platform):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/devices',
+        f'https://api.flameup.ai/api/v1/people/{person_id}/devices',
         headers={
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': f'Bearer {API_KEY}'
         },
         json={
-            'user_id': user_id,
-            'device_token': device_token,
+            'token': token,
             'platform': platform,  # 'ios', 'android', or 'web'
             'device_name': 'iPhone 15 Pro',
             'app_version': '2.1.0'
@@ -269,9 +267,9 @@ def register_device(user_id, device_token, platform):
     )
     return response.json()
 
-# Register an iOS device
+# Register an iOS device (person_id is the Flameup person ID from Step 2)
 register_device(
-    'user_12345',
+    'person_abc123',
     'fcm_device_token_here',
     'ios'
 )
@@ -291,7 +289,7 @@ async function sendTransactional(userId, templateId, data) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': API_KEY
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
         user_id: userId,
@@ -318,7 +316,7 @@ def send_transactional(user_id, template_id, data):
         f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/transactional/send',
         headers={
             'Content-Type': 'application/json',
-            'X-API-Key': API_KEY
+            'Authorization': f'Bearer {API_KEY}'
         },
         json={
             'user_id': user_id,
@@ -347,7 +345,7 @@ Check that everything is working:
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/search?email=sarah@example.com" \
-  -H "X-API-Key: flare_test_your_key_here"
+  -H "Authorization: Bearer flare_test_your_key_here"
 ```
 
 ## What's Next?
