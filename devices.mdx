@@ -5,7 +5,7 @@ description: Register and manage device tokens for push notifications
 
 ## Overview
 
-The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app or enable web push, you register their device token with Flameup to enable push messaging.
+The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
 
 <Callout kind="info">**Required Permission**: `devices:write` for all device operations.</Callout>
 
@@ -20,8 +20,8 @@ Flameup supports push notifications on three platforms:
   <Card title="Android" icon="smartphone">
     Firebase Cloud Messaging (FCM) for Android devices
   </Card>
-  <Card title="Web" icon="globe">
-    Web Push API via Firebase Cloud Messaging
+  <Card title="Web (Coming Soon)" icon="globe">
+    Web Push API via Firebase Cloud Messaging - Coming Soon...
   </Card>
 </Columns>
 
@@ -53,7 +53,7 @@ A device token in Flameup has the following structure:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `token` | string | Yes | FCM/APNs token from the device |
-| `platform` | string | Yes | `ios`, `android`, or `web` |
+| `platform` | string | Yes | `ios` or `android` (`web` coming soon) |
 | `device_name` | string | No | Human-readable device name |
 | `device_model` | string | No | Device model identifier |
 | `os_version` | string | No | Operating system version |
@@ -147,7 +147,9 @@ Register a device token to enable push notifications for a user.
     }
     ```
   </Tab>
-  <Tab title="Web Push" icon="globe">
+  <Tab title="Web Push (Coming Soon)" icon="globe">
+    <Callout kind="info">Web Push support is coming soon. The code below shows the planned implementation.</Callout>
+
     ```javascript
     // After obtaining FCM token in your web app
     async function registerWebDevice(personId, fcmToken) {
@@ -249,7 +251,7 @@ Retrieve all devices for a person.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `platform` | string | Filter by platform: `ios`, `android`, `web` |
+| `platform` | string | Filter by platform: `ios`, `android` (`web` coming soon) |
 | `is_active` | boolean | Filter by active status |
 | `limit` | integer | Number of results (default 50, max 100) |
 | `offset` | integer | Pagination offset |
@@ -430,7 +432,9 @@ FCM tokens can change. Handle token refresh in your app:
     }
     ```
   </Tab>
-  <Tab title="Web" icon="globe">
+  <Tab title="Web (Coming Soon)" icon="globe">
+    <Callout kind="info">Web Push support is coming soon.</Callout>
+
     ```javascript
     import { onMessage, getToken } from 'firebase/messaging';
 
@@ -496,7 +500,7 @@ FCM tokens can change. Handle token refresh in your app:
 | Issue | Solution |
 |-------|----------|
 | Token not registered | Verify `person_id` exists and token is valid |
-| Wrong platform | Ensure `platform` matches the device (ios/android/web) |
+| Wrong platform | Ensure `platform` matches the device (ios/android) |
 | Invalid token | Token may have expired; request a fresh token from FCM |
 | User not receiving | Check `is_active` and `is_valid` are both `true` |
 | Notification blocked | User may have disabled notifications in device settings |

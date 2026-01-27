@@ -232,7 +232,7 @@ async function registerDevice(personId, token, platform) {
       },
       body: JSON.stringify({
         token: token,
-        platform: platform, // 'ios', 'android', or 'web'
+        platform: platform, // 'ios' or 'android' ('web' coming soon)
         device_name: 'iPhone 15 Pro',
         app_version: '2.1.0'
       })
@@ -260,7 +260,7 @@ def register_device(person_id, token, platform):
         },
         json={
             'token': token,
-            'platform': platform,  # 'ios', 'android', or 'web'
+            'platform': platform,  # 'ios' or 'android' ('web' coming soon)
             'device_name': 'iPhone 15 Pro',
             'app_version': '2.1.0'
         }

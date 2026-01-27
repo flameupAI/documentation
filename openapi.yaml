@@ -441,7 +441,7 @@ paths:
             format: uuid
         - name: platform
           in: query
-          description: Filter by platform
+          description: Filter by platform (web coming soon)
           schema:
             type: string
             enum: [ios, android, web]
@@ -869,6 +869,7 @@ components:
           type: string
         platform:
           type: string
+          description: Device platform (web coming soon)
           enum: [ios, android, web]
         device_name:
           type: string
@@ -904,6 +905,7 @@ components:
           description: FCM/APNs token
         platform:
           type: string
+          description: Device platform (web coming soon)
           enum: [ios, android, web]
         device_name:
           type: string
@@ -1009,7 +1011,7 @@ components:
         platform:
           type: string
           enum: [ios, android, web, all]
-          description: Target platform (defaults to all)
+          description: Target platform (defaults to all; web coming soon)
 
     Error:
       type: object
