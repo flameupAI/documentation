@@ -89,21 +89,22 @@ class Flameup {
     return response.json();
   }
 
-  // Push
-  async sendPush(userId, template, data = {}) {
+  // Transactional messaging
+  async sendTransactional(userId, templateId, channel, variables = {}) {
     return this.request('/transactional/send', {
       method: 'POST',
       body: JSON.stringify({
         user_id: userId,
-        template,
-        data
+        template_id: templateId,
+        channel,
+        variables
       })
     });
   }
 }
 
 // Usage
-const flare = new Flameup('flare_live_xxx', 'ws_abc123');
+const flare = new Flameup('ws_live_abc12345_abc123.your_secret_here', 'ws_abc123');
 
 await flare.identifyUser('user_123', {
   email: 'jane@example.com',
@@ -123,7 +124,7 @@ import axios from 'axios';
 const flare = axios.create({
   baseURL: 'https://api.flameup.ai/api/v1',
   headers: {
-    'Authorization': 'Bearer flare_live_xxx'
+    'Authorization': 'Bearer ws_live_abc12345_abc123.your_secret_here'
   }
 });
 
@@ -183,20 +184,21 @@ class Flameup:
             }
         ).json()
 
-    def send_push(self, user_id, template, data=None):
-        """Send a transactional push notification."""
+    def send_transactional(self, user_id, template_id, channel, variables=None):
+        """Send a transactional message (email, sms, or push)."""
         return self.session.post(
             self._url('/transactional/send'),
             json={
                 'user_id': user_id,
-                'template': template,
-                'data': data or {}
+                'template_id': template_id,
+                'channel': channel,
+                'variables': variables or {}
             }
         ).json()
 
 
 # Usage
-flare = Flameup('flare_live_xxx', 'ws_abc123')
+flare = Flameup('ws_live_abc12345_abc123.your_secret_here', 'ws_abc123')
 
 flare.identify('user_123', {
     'email': 'jane@example.com',
@@ -251,7 +253,7 @@ class AsyncFlameup:
 import asyncio
 
 async def main():
-    flare = AsyncFlameup('flare_live_xxx', 'ws_abc123')
+    flare = AsyncFlameup('ws_live_abc12345_abc123.your_secret_here', 'ws_abc123')
 
     await flare.identify('user_123', {'email': 'jane@example.com'})
     await flare.track('user_123', 'page_viewed', {'page': '/pricing'})
@@ -318,7 +320,7 @@ enum FlameupError: Error {
 }
 
 // Usage
-let flare = Flameup(apiKey: "flare_live_xxx", workspaceId: "ws_abc123")
+let flare = Flameup(apiKey: "ws_live_abc12345_abc123.your_secret_here", workspaceId: "ws_abc123")
 
 Task {
     try await flare.identify(userId: "user_123", traits: [
@@ -387,7 +389,7 @@ class Flameup(
 }
 
 // Usage
-val flare = Flameup("flare_live_xxx", "ws_abc123")
+val flare = Flameup("ws_live_abc12345_abc123.your_secret_here", "ws_abc123")
 
 lifecycleScope.launch {
     flare.identify("user_123", mapOf(
@@ -405,7 +407,7 @@ For quick testing or shell scripts:
 
 ```bash
 # Set your credentials
-export FLARE_API_KEY="flare_live_xxx"
+export FLARE_API_KEY="ws_live_abc12345_abc123.your_secret_here"
 export WORKSPACE_ID="ws_abc123"
 
 # Identify a user
