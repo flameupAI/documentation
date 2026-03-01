@@ -29,13 +29,13 @@ Send push notifications to a user's registered devices.
 
 ### Send Push Notification
 
-**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send`
+**Endpoint:** `POST /api/v1/push/send`
 
 <CodeGroup>
 ```javascript
 async function sendPush(personId, title, body, options = {}) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
+    `https://api.flameup.ai/api/v1/push/send`,
     {
       method: 'POST',
       headers: {
@@ -70,7 +70,7 @@ import requests
 
 def send_push(person_id, title, body, **options):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
+        f'https://api.flameup.ai/api/v1/push/send',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
@@ -95,7 +95,7 @@ send_push(
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/push/send" \
+curl -X POST "https://api.flameup.ai/api/v1/push/send" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
   -d '{

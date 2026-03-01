@@ -38,7 +38,7 @@ tags:
     description: Send one-off messages
 
 paths:
-  /workspaces/{workspaceId}/people:
+  /people:
     get:
       tags:
         - People
@@ -46,7 +46,6 @@ paths:
       description: Retrieve a paginated list of people in the workspace.
       operationId: listPeople
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
         - name: limit
           in: query
           description: Number of results (max 100)
@@ -97,8 +96,6 @@ paths:
       summary: Create person
       description: Create a new person profile.
       operationId: createPerson
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
         required: true
         content:
@@ -117,7 +114,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /workspaces/{workspaceId}/people/{personId}:
+  /people/{id}:
     get:
       tags:
         - People
@@ -125,8 +122,12 @@ paths:
       description: Retrieve a person by ID.
       operationId: getPerson
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/PersonId'
+        - name: id
+          in: path
+          required: true
+          description: External ID or email
+          schema:
+            type: string
       responses:
         '200':
           description: Successful response
@@ -143,8 +144,12 @@ paths:
       description: Update a person's attributes.
       operationId: updatePerson
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/PersonId'
+        - name: id
+          in: path
+          required: true
+          description: External ID or email
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -167,23 +172,25 @@ paths:
       description: Delete a person and all associated data.
       operationId: deletePerson
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/PersonId'
+        - name: id
+          in: path
+          required: true
+          description: External ID or email
+          schema:
+            type: string
       responses:
         '204':
           description: Person deleted
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /workspaces/{workspaceId}/people/upsert:
+  /people/upsert:
     post:
       tags:
         - People
       summary: Upsert person
       description: Create or update a person based on external_id or email.
       operationId: upsertPerson
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
         required: true
         content:
@@ -204,15 +211,13 @@ paths:
                         type: boolean
                         description: True if person was created, false if updated
 
-  /workspaces/{workspaceId}/people/batch:
+  /people/batch:
     post:
       tags:
         - People
       summary: Batch upsert people
       description: Create or update multiple people (max 100).
       operationId: batchUpsertPeople
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
         required: true
         content:
@@ -244,7 +249,7 @@ paths:
                   updated_count:
                     type: integer
 
-  /workspaces/{workspaceId}/people/search:
+  /people/search:
     get:
       tags:
         - People
@@ -252,7 +257,6 @@ paths:
       description: Search for people by specific criteria.
       operationId: searchPeople
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
         - name: q
           in: query
           description: General search query
@@ -397,14 +401,13 @@ paths:
                       $ref: '#/components/schemas/Event'
                   total:
                     type: integer
+  /track:
     post:
       tags:
         - Events
       summary: Track event
       description: Record a user event.
       operationId: trackEvent
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
         required: true
         content:
@@ -825,7 +828,7 @@ components:
           format: uuid
         event:
           type: string
-        properties:
+        parameters:
           type: object
         timestamp:
           type: string
@@ -837,18 +840,24 @@ components:
     TrackEventRequest:
       type: object
       required:
-        - userId
+        - external_id
         - event
       properties:
+        external_id:
+          type: string
+          description: User identifier (external_id or email)
         userId:
           type: string
-          description: User identifier
+          description: Deprecated alias for external_id
         event:
           type: string
           description: Event name
+        parameters:
+          type: object
+          description: Event parameters
         properties:
           type: object
-          description: Event properties
+          description: Alias for parameters
         timestamp:
           type: string
           format: date-time
