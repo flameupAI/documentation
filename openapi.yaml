@@ -790,6 +790,9 @@ components:
         email:
           type: string
           format: email
+        phone:
+          type: string
+          description: User's phone number
         traits:
           type: object
           description: User attributes
