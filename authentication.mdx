@@ -37,7 +37,7 @@ Pass your API key in the `Authorization` header using the Bearer scheme:
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  'https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people',
+  'https://api.flameup.ai/api/v1/people',
   {
     method: 'GET',
     headers: {
@@ -51,7 +51,7 @@ const response = await fetch(
 import requests
 
 response = requests.get(
-    'https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people',
+    'https://api.flameup.ai/api/v1/people',
     headers={
         'Authorization': 'Bearer ws_live_abc12345_abc123.your_secret_here'
     }
@@ -59,7 +59,7 @@ response = requests.get(
 ```
 
 ```bash
-curl -X GET "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
+curl -X GET "https://api.flameup.ai/api/v1/people" \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here"
 ```
 </CodeGroup>
