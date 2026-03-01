@@ -41,7 +41,7 @@ const WORKSPACE_ID = 'your_workspace_id';
 
 async function identifyUser(userId, email, traits) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/people`,
+    `https://api.flameup.ai/api/v1/people`,
     {
       method: 'POST',
       headers: {
@@ -82,7 +82,7 @@ WORKSPACE_ID = 'your_workspace_id'
 
 def identify_user(user_id, email, traits):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/people',
+        f'https://api.flameup.ai/api/v1/people',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
@@ -111,7 +111,7 @@ print(f"User identified: {user['id']}")
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
+curl -X POST "https://api.flameup.ai/api/v1/people" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ws_test_abc12345_abc123.your_secret_here" \
   -d '{
@@ -284,7 +284,7 @@ Send a push notification to a user (e.g., order confirmation):
 ```javascript
 async function sendPush(personId, title, body, options = {}) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
+    `https://api.flameup.ai/api/v1/push/send`,
     {
       method: 'POST',
       headers: {
@@ -314,7 +314,7 @@ await sendPush('person_abc123',
 ```python
 def send_push(person_id, title, body, **options):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
+        f'https://api.flameup.ai/api/v1/push/send',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
@@ -348,7 +348,7 @@ Check that everything is working:
 2. **API**: Fetch the user you just created:
 
 ```bash
-curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people/search?email=sarah@example.com" \
+curl "https://api.flameup.ai/api/v1/people/search?email=sarah@example.com" \
   -H "Authorization: Bearer ws_test_abc12345_abc123.your_secret_here"
 ```
 
