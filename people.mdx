@@ -38,6 +38,7 @@ A person in Flameup has the following structure:
 | `workspace_id` | string | Workspace identifier (read-only) |
 | `userId` | string | Your unique identifier for this user (required, max 255 chars) |
 | `email` | string | User's email address (optional, max 254 chars) |
+| `phone` | string | User's phone number (optional, max 50 chars) |
 | `anonymousId` | string | Anonymous identifier for merging anonymous activity (transient, not persisted) |
 | `traits` | object | Custom user attributes (see validation rules) |
 | `created_at` | timestamp | When the person was created (read-only) |
@@ -62,6 +63,7 @@ const response = await fetch(
     body: JSON.stringify({
       userId: 'user_12345',           // Required: your unique ID
       email: 'jane@example.com',       // Optional but recommended
+      phone: '+15551234567',           // Optional
       traits: {
         first_name: 'Jane',
         last_name: 'Doe',
@@ -85,6 +87,7 @@ response = requests.post(
     json={
         'userId': 'user_12345',
         'email': 'jane@example.com',
+        'phone': '+15551234567',
         'traits': {
             'first_name': 'Jane',
             'last_name': 'Doe',
