@@ -401,6 +401,51 @@ lifecycleScope.launch {
 }
 ```
 
+### Flutter (Dart)
+
+```yaml
+# pubspec.yaml
+dependencies:
+  flameup_flutter:
+    git:
+      url: https://github.com/flameupAI/flare.git
+      path: sdk/flutter
+```
+
+```dart
+import 'package:flameup_flutter/flameup.dart';
+
+// 1. Initialize
+final flameup = Flameup(FlameupConfig(
+  apiKey: 'ws_live_abc12345_abc123.your_secret_here',
+));
+
+// 2. Identify user on login
+final person = await flameup.identify(
+  userId: 'user_123',
+  email: 'jane@example.com',
+  traits: {'first_name': 'Jane', 'plan': 'premium'},
+);
+
+// 3. Track events (zero latency — queued & batched automatically)
+flameup.track(
+  externalId: 'user_123',
+  event: 'add_to_cart',
+  parameters: {'product_id': 'prod_001', 'price': 49.99},
+);
+
+// 4. Register device for push notifications
+await flameup.registerDevice(
+  personId: person.id!,
+  token: fcmToken,
+  platform: 'ios',
+  deviceInfo: DeviceInfo(
+    deviceName: 'iPhone 15 Pro',
+    appVersion: '2.1.0',
+  ),
+);
+```
+
 ## cURL Examples
 
 For quick testing or shell scripts:
