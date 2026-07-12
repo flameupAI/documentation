@@ -5,53 +5,48 @@ description: Understanding Flameup API rate limits and quotas
 
 ## Overview
 
-Flameup implements rate limiting to ensure fair usage and platform stability. Rate limits are applied per API key and vary by endpoint type.
+Flameup implements rate limiting to ensure fair usage and platform stability. Rate limits are applied per IP address and vary by endpoint type.
 
 ## Rate Limit Tiers
 
-<Columns cols={3}>
-  <Card title="Public" icon="globe">
+<Columns cols={2}>
+  <Card title="API requests" icon="globe">
     **75 requests/minute**
 
-    Unauthenticated endpoints
+    All API traffic, including requests made with an API key. Tracked per IP address.
   </Card>
-  <Card title="Authenticated" icon="key">
+  <Card title="Dashboard" icon="key">
     **120 requests/minute**
 
-    With valid API key
-  </Card>
-  <Card title="Enterprise" icon="building">
-    **Custom limits**
-
-    Tailored to your needs
+    Dashboard (Firebase) sessions only. Does not apply to API-key requests.
   </Card>
 </Columns>
 
 ## Current Rate Limits
 
-Rate limits are applied globally per API key, not per endpoint:
+Rate limits are applied globally per IP address, not per endpoint:
 
-| Authentication | Limit | Window |
-|----------------|-------|--------|
-| Public (no API key) | 75/min | Per IP |
-| Authenticated (API key) | 120/min | Per API key |
+| Surface | Limit | Window |
+|---------|-------|--------|
+| API requests (with or without API key) | 75/min | Per IP |
+| Dashboard (Firebase) sessions | 120/min | Per user |
 
-<Callout kind="info">All endpoints share the same rate limit pool. Plan your request patterns accordingly.</Callout>
+<Callout kind="info">All API requests share the same per-IP rate limit pool, regardless of endpoint or whether an API key is used. Plan your request patterns accordingly.</Callout>
 
 ## Rate Limit Headers
 
-Every API response includes rate limit information in headers:
+Rate limit headers are returned **only on `429 Too Many Requests` responses** — successful responses do not include them:
 
 ```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 950
+X-RateLimit-Limit: 37
+X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1705320660
 ```
 
 | Header | Description |
 |--------|-------------|
-| `X-RateLimit-Limit` | Maximum requests allowed in the window |
-| `X-RateLimit-Remaining` | Requests remaining in current window |
+| `X-RateLimit-Limit` | Currently reports the burst value (roughly half the per-minute limit), not the per-minute maximum |
+| `X-RateLimit-Remaining` | Requests remaining in the current window (`0` on a 429) |
 | `X-RateLimit-Reset` | Unix timestamp when the window resets |
 
 ## Handling Rate Limits
@@ -179,7 +174,7 @@ class FlameupClient:
     await flare.batchUpsertPeople(users);
     ```
 
-    Batch endpoints are more efficient and have separate, higher limits.
+    Batch endpoints let you do more work per request, which helps you stay within the per-IP limit.
   </Expandable>
   <Expandable title="Monitor Rate Limit Headers" default-open="false">
     Track your usage to avoid hitting limits:
@@ -239,25 +234,9 @@ class FlameupClient:
   </Expandable>
 </ExpandableGroup>
 
-## Quota Limits
-
-In addition to rate limits, some operations have quota limits:
-
-| Resource | Limit | Period |
-|----------|-------|--------|
-| People | 100,000 | Per workspace |
-| Events | 10,000,000 | Per month |
-| Campaigns | 100 | Per workspace |
-| API Keys | 20 | Per workspace |
-| Device tokens | 10 per person | Per person |
-
-<Callout kind="info">Quota limits vary by plan. Contact support to increase limits.</Callout>
-
 ## Requesting Higher Limits
 
 If you need higher rate limits:
 
 1. **Optimize your integration** - Use batching, caching, and webhooks
-2. **Contact support** - Explain your use case for limit increases
-3. **Upgrade your plan** - Higher tiers include higher limits
-4. **Enterprise plans** - Custom limits available for large-scale deployments
+2. **Contact support** - Explain your use case for a limit increase

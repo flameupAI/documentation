@@ -1,23 +1,13 @@
 ---
-title: Messaging APIs
-description: Send push notifications and emails to your users
+title: Transactional Push
+description: Send transactional push notifications to your users
 ---
 
 ## Overview
 
-Flameup provides APIs to send messages directly to your users. Use these for transactional notifications triggered by user actions like order confirmations, password resets, and account alerts.
+Flameup's transactional push API sends notifications directly to a user's registered devices. Use it for notifications triggered by user actions like order confirmations, password resets, and account alerts.
 
-<Columns cols={3}>
-  <Card title="Push Notifications" icon="bell">
-    Send to iOS and Android devices via FCM
-  </Card>
-  <Card title="Email" icon="mail">
-    Send transactional emails via Resend
-  </Card>
-  <Card title="SMS (Coming Soon)" icon="message-square">
-    Send text messages via Twilio
-  </Card>
-</Columns>
+<Callout kind="info">Transactional **email** is not sent through the public API key — send it via campaigns or the Flameup dashboard. See [Campaigns](/campaigns).</Callout>
 
 ---
 
@@ -25,17 +15,17 @@ Flameup provides APIs to send messages directly to your users. Use these for tra
 
 Send push notifications to a user's registered devices.
 
-<Callout kind="info">**Required**: User must have a registered device token. See [Devices API](/devices) for registration.</Callout>
+<Callout kind="info">**Required**: User must have a registered device token. See [Devices API](/devices) for registration. Your API key must have access to the target workspace.</Callout>
 
 ### Send Push Notification
 
-**Endpoint:** `POST /api/v1/push/send`
+**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send`
 
 <CodeGroup>
 ```javascript
 async function sendPush(personId, title, body, options = {}) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/push/send`,
+    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
     {
       method: 'POST',
       headers: {
@@ -70,7 +60,7 @@ import requests
 
 def send_push(person_id, title, body, **options):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/push/send',
+        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
@@ -95,7 +85,7 @@ send_push(
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/push/send" \
+curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/send" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
   -d '{
@@ -113,7 +103,7 @@ curl -X POST "https://api.flameup.ai/api/v1/push/send" \
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `person_id` | string | Yes | Flameup person UUID |
-| `title` | string | Yes | Notification title (max 255 chars) |
+| `title` | string | Yes | Notification title |
 | `body` | string | Yes | Notification body text |
 | `platform` | string | No | Target platform: `ios`, `android`, or `all` (default). Web coming soon. |
 | `image_url` | string | No | URL for rich notification image |
@@ -240,115 +230,6 @@ curl -X POST "https://api.flameup.ai/api/v1/push/send" \
 
 ---
 
-## Email
-
-Send transactional emails to your users.
-
-### Send Email
-
-**Endpoint:** `POST /api/v1/messaging/send-email`
-
-<CodeGroup>
-```javascript
-async function sendEmail(to, subject, htmlBody, textBody) {
-  const response = await fetch(
-    'https://api.flameup.ai/api/v1/messaging/send-email',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        workspaceId: WORKSPACE_ID,
-        to: Array.isArray(to) ? to : [to],
-        subject: subject,
-        htmlBody: htmlBody,
-        textBody: textBody
-      })
-    }
-  );
-
-  return response.json();
-}
-
-// Example: Password reset email
-await sendEmail(
-  'user@example.com',
-  'Reset Your Password',
-  '<h1>Password Reset</h1><p>Click <a href="https://myapp.com/reset?token=abc123">here</a> to reset your password.</p>',
-  'Click this link to reset your password: https://myapp.com/reset?token=abc123'
-);
-```
-
-```python
-def send_email(to, subject, html_body, text_body=None):
-    response = requests.post(
-        'https://api.flameup.ai/api/v1/messaging/send-email',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {API_KEY}'
-        },
-        json={
-            'workspaceId': WORKSPACE_ID,
-            'to': to if isinstance(to, list) else [to],
-            'subject': subject,
-            'htmlBody': html_body,
-            'textBody': text_body
-        }
-    )
-    return response.json()
-
-# Example: Password reset email
-send_email(
-    'user@example.com',
-    'Reset Your Password',
-    '<h1>Password Reset</h1><p>Click <a href="https://myapp.com/reset?token=abc123">here</a>.</p>',
-    'Click this link to reset your password: https://myapp.com/reset?token=abc123'
-)
-```
-
-```bash
-curl -X POST "https://api.flameup.ai/api/v1/messaging/send-email" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your_api_key" \
-  -d '{
-    "workspaceId": "your_workspace_id",
-    "to": ["user@example.com"],
-    "subject": "Reset Your Password",
-    "htmlBody": "<h1>Password Reset</h1><p>Click <a href=\"https://myapp.com/reset?token=abc123\">here</a>.</p>",
-    "textBody": "Click this link to reset your password: https://myapp.com/reset?token=abc123"
-  }'
-```
-</CodeGroup>
-
-### Request Body
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `workspaceId` | string | Yes | Your workspace ID |
-| `to` | array | Yes | Array of recipient email addresses |
-| `subject` | string | Yes | Email subject line |
-| `htmlBody` | string | No | HTML email body |
-| `textBody` | string | No | Plain text email body |
-| `from` | string | No | Sender email address |
-| `replyTo` | string | No | Reply-to email address |
-
-<Callout kind="info">At least one of `htmlBody` or `textBody` must be provided.</Callout>
-
-### Response
-
-```json
-{
-  "success": true,
-  "messageId": "550e8400-e29b-41d4-a716-446655440000",
-  "message": "Email sent successfully",
-  "provider": "resend"
-}
-```
-
----
-
 ## Error Handling
 
 <Callout kind="warning">Handle these common error cases in your integration.</Callout>
@@ -367,20 +248,6 @@ Common push errors:
 - No device tokens registered for user
 - Invalid or expired device token
 - FCM configuration missing for workspace
-
-### Email Errors
-
-```json
-{
-  "success": false,
-  "error": "Invalid recipient email address"
-}
-```
-
-Common email errors:
-- Invalid email format
-- Email provider configuration missing
-- Rate limit exceeded
 
 ### Handling in Code
 
@@ -437,8 +304,8 @@ async function sendNotification(personId, title, body, options) {
     ```javascript
     const result = await sendPush(personId, title, body);
     if (result.status === 'failed') {
-      // Fall back to email
-      await sendEmail(userEmail, title, `<p>${body}</p>`);
+      // Fall back to another channel, e.g. an email campaign or in-app message
+      await notifyViaFallbackChannel(personId, title, body);
     }
     ```
   </Expandable>

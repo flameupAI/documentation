@@ -7,7 +7,7 @@ description: Register and manage device tokens for push notifications
 
 The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
 
-<Callout kind="info">**Required Permission**: `devices:write` for all device operations.</Callout>
+<Callout kind="info">**Required Permission**: device operations are guarded by `devices:write`. There is currently no granular `devices` scope you can grant on its own — use a full-access (`*`) API key, or set a `devices:*` wildcard when creating the key via the API.</Callout>
 
 ## Supported Platforms
 
@@ -43,6 +43,7 @@ A device token in Flameup has the following structure:
   "is_active": true,
   "is_valid": true,
   "last_used_at": "2024-01-20T14:45:00Z",
+  "registration_count": 3,
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T14:45:00Z"
 }
@@ -59,7 +60,7 @@ A device token in Flameup has the following structure:
 | `os_version` | string | No | Operating system version |
 | `app_version` | string | No | Your app's version |
 
-<Callout kind="tip">The `person_id` is passed in the URL path, not in the request body.</Callout>
+<Callout kind="tip">The `person_id` in the URL path is the Flameup person **UUID** (the `id` returned when you create or identify a person), not your external `userId`. It is passed in the URL path, not in the request body.</Callout>
 
 ## Register a Device
 
@@ -227,19 +228,17 @@ device = response.json()
 ```
 </CodeGroup>
 
-**Response:**
+**Response** (`200 OK`):
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "person_id": "550e8400-e29b-41d4-a716-446655440001",
-  "device_token": "fMhT8K9x...",
-  "platform": "ios",
-  "is_active": true,
-  "is_valid": true,
-  "created_at": "2024-01-15T10:30:00Z"
+  "success": true,
+  "device_id": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Device registered successfully"
 }
 ```
+
+<Callout kind="info">Registration returns only the new `device_id`, not the full device object. Use the List Devices endpoint to retrieve full device details.</Callout>
 
 ## List Devices
 
@@ -247,14 +246,7 @@ Retrieve all devices for a person.
 
 **Endpoint:** `GET /api/v1/people/{person_id}/devices`
 
-### Query Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `platform` | string | Filter by platform: `ios`, `android` (`web` coming soon) |
-| `is_active` | boolean | Filter by active status |
-| `limit` | integer | Number of results (default 50, max 100) |
-| `offset` | integer | Pagination offset |
+This endpoint returns all devices for the person. It takes no query parameters and is not paginated.
 
 <CodeGroup>
 ```javascript
@@ -286,6 +278,32 @@ curl "https://api.flameup.ai/api/v1/people/{person_id}/devices" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
+
+**Response** (`200 OK`):
+
+```json
+{
+  "success": true,
+  "devices": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "workspace_id": "ws_abc123",
+      "person_id": "550e8400-e29b-41d4-a716-446655440001",
+      "device_token": "fMhT8K9x...",
+      "platform": "ios",
+      "is_active": true,
+      "is_valid": true,
+      "last_used_at": "2024-01-20T14:45:00Z",
+      "registration_count": 3,
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-20T14:45:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+The `count` field is the number of devices returned. Devices are ordered by `last_used_at` (most recently used first), then by `created_at` descending.
 
 ## Update a Device
 

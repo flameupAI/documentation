@@ -119,16 +119,20 @@ curl -X POST "https://api.flameup.ai/api/v1/people" \
 
 <Callout kind="tip">Use a stable, unique identifier from your system as the `userId`. Database primary keys or UUIDs work well.</Callout>
 
+<Callout kind="info">The identifier can be sent as `userId`, `user_id`, or `external_id` — these are aliases for the same value.</Callout>
+
 ## Get a Person
 
-Retrieve a person by their Flameup ID.
+Retrieve a person by their `userId` — the external identifier you provided when creating them.
 
 **Endpoint:** `GET /api/v1/people/{id}`
+
+<Callout kind="info">The `{id}` path parameter is your external `userId`, **not** the Flameup `id` UUID returned in the response body.</Callout>
 
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/${personId}`,
+  `https://api.flameup.ai/api/v1/people/${userId}`,
   {
     headers: {
       'Authorization': `Bearer ${API_KEY}`
@@ -141,7 +145,7 @@ const person = await response.json();
 
 ```python
 response = requests.get(
-    f'https://api.flameup.ai/api/v1/people/{person_id}',
+    f'https://api.flameup.ai/api/v1/people/{user_id}',
     headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
@@ -149,7 +153,7 @@ person = response.json()
 ```
 
 ```bash
-curl "https://api.flameup.ai/api/v1/people/{person_id}" \
+curl "https://api.flameup.ai/api/v1/people/{userId}" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
@@ -160,10 +164,12 @@ Update an existing person's attributes.
 
 **Endpoint:** `PUT /api/v1/people/{id}`
 
+<Callout kind="info">The `{id}` path parameter is your external `userId`, not the Flameup `id` UUID.</Callout>
+
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/${personId}`,
+  `https://api.flameup.ai/api/v1/people/${userId}`,
   {
     method: 'PUT',
     headers: {
@@ -179,12 +185,13 @@ const response = await fetch(
   }
 );
 
-const person = await response.json();
+const result = await response.json();
+// { "message": "Person updated successfully" }
 ```
 
 ```python
 response = requests.put(
-    f'https://api.flameup.ai/api/v1/people/{person_id}',
+    f'https://api.flameup.ai/api/v1/people/{user_id}',
     headers={
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {API_KEY}'
@@ -197,11 +204,11 @@ response = requests.put(
     }
 )
 
-person = response.json()
+result = response.json()  # {'message': 'Person updated successfully'}
 ```
 
 ```bash
-curl -X PUT "https://api.flameup.ai/api/v1/people/{person_id}" \
+curl -X PUT "https://api.flameup.ai/api/v1/people/{userId}" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
   -d '{
@@ -213,7 +220,15 @@ curl -X PUT "https://api.flameup.ai/api/v1/people/{person_id}" \
 ```
 </CodeGroup>
 
-<Callout kind="info">Updates are merged with existing data. To remove an attribute, set it to `null`.</Callout>
+A successful update returns `200 OK` with a confirmation message, not the updated person object:
+
+```json
+{
+  "message": "Person updated successfully"
+}
+```
+
+<Callout kind="info">Updates are merged with existing trait data. Setting a trait to `null` stores a `null` value for that key — it does not remove the key.</Callout>
 
 ## Upsert a Person
 
@@ -243,8 +258,7 @@ const response = await fetch(
   }
 );
 
-const result = await response.json();
-console.log('Was created:', result.was_created);  // true if new, false if updated
+const person = await response.json();
 ```
 
 ```python
@@ -265,8 +279,7 @@ response = requests.post(
     }
 )
 
-result = response.json()
-print(f"Was created: {result['was_created']}")
+person = response.json()
 ```
 
 ```bash
@@ -285,7 +298,7 @@ curl -X POST "https://api.flameup.ai/api/v1/people/upsert" \
 ```
 </CodeGroup>
 
-The response includes a `was_created` boolean indicating whether the person was newly created or updated.
+Upsert returns `201 Created` with the same person object as [Create a Person](#create-a-person), whether the person was newly created or updated.
 
 ## List People
 
@@ -299,17 +312,12 @@ Retrieve a paginated list of people.
 |-----------|------|---------|-------------|
 | `limit` | integer | 50 | Number of results (max 500) |
 | `offset` | integer | 0 | Pagination offset |
-| `status` | string | - | Filter by status: `active`, `unsubscribed`, `bounced` |
-| `search` | string | - | Search by name or email |
-| `created_since` | timestamp | - | Filter by creation date |
-| `updated_since` | timestamp | - | Filter by last update date |
 
 <CodeGroup>
 ```javascript
 const params = new URLSearchParams({
   limit: '50',
-  status: 'active',
-  search: 'acme'
+  offset: '0'
 });
 
 const response = await fetch(
@@ -330,8 +338,7 @@ response = requests.get(
     headers={'Authorization': f'Bearer {API_KEY}'},
     params={
         'limit': 50,
-        'status': 'active',
-        'search': 'acme'
+        'offset': 0
     }
 )
 
@@ -341,7 +348,7 @@ total = data['total']
 ```
 
 ```bash
-curl "https://api.flameup.ai/api/v1/people?limit=50&status=active&search=acme" \
+curl "https://api.flameup.ai/api/v1/people?limit=50&offset=0" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
@@ -359,56 +366,11 @@ curl "https://api.flameup.ai/api/v1/people?limit=50&status=active&search=acme" \
 
 ## Search People
 
-Search for people by specific criteria.
-
-**Endpoint:** `GET /api/v1/people/search`
-
-### Query Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `q` | string | General search query |
-| `email` | string | Exact email match |
-| `userId` | string | Exact userId match |
-| `limit` | integer | Number of results (default 10) |
-
-<CodeGroup>
-```javascript
-// Search by email
-const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/search?email=jane@example.com`,
-  {
-    headers: {
-      'Authorization': `Bearer ${API_KEY}`
-    }
-  }
-);
-
-const { people } = await response.json();
-const person = people[0];  // First match
-```
-
-```python
-# Search by userId
-response = requests.get(
-    f'https://api.flameup.ai/api/v1/people/search',
-    headers={'Authorization': f'Bearer {API_KEY}'},
-    params={'userId': 'user_12345'}
-)
-
-data = response.json()
-person = data['people'][0] if data['people'] else None
-```
-
-```bash
-curl "https://api.flameup.ai/api/v1/people/search?email=jane@example.com" \
-  -H "Authorization: Bearer your_api_key"
-```
-</CodeGroup>
+<Callout kind="info">Programmatic search and filtering are not yet available. The `GET /api/v1/people/search` endpoint currently ignores all query parameters and returns the same paginated people list as [List People](#list-people). To look up a specific person, use [Get a Person](#get-a-person) with their `userId`.</Callout>
 
 ## Batch Upsert
 
-Create or update multiple people in a single request (max 100).
+Create or update multiple people in a single request.
 
 **Endpoint:** `POST /api/v1/people/batch`
 
@@ -423,7 +385,7 @@ const response = await fetch(
       'Authorization': `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
-      people: [
+      identify: [
         {
           userId: 'user_001',
           email: 'alice@example.com',
@@ -433,14 +395,13 @@ const response = await fetch(
           userId: 'user_002',
           email: 'bob@example.com',
           traits: { first_name: 'Bob', plan: 'premium' }
-        },
-        // ... up to 100 people
+        }
       ]
     })
   }
 );
 
-const { people, created_count, updated_count } = await response.json();
+const { results, total } = await response.json();
 ```
 
 ```python
@@ -451,7 +412,7 @@ response = requests.post(
         'Authorization': f'Bearer {API_KEY}'
     },
     json={
-        'people': [
+        'identify': [
             {
                 'userId': 'user_001',
                 'email': 'alice@example.com',
@@ -467,7 +428,7 @@ response = requests.post(
 )
 
 result = response.json()
-print(f"Created: {result['created_count']}, Updated: {result['updated_count']}")
+print(f"Processed {result['total']} records")
 ```
 
 ```bash
@@ -475,7 +436,7 @@ curl -X POST "https://api.flameup.ai/api/v1/people/batch" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
   -d '{
-    "people": [
+    "identify": [
       {"userId": "user_001", "email": "alice@example.com", "traits": {"first_name": "Alice"}},
       {"userId": "user_002", "email": "bob@example.com", "traits": {"first_name": "Bob"}}
     ]
@@ -483,7 +444,35 @@ curl -X POST "https://api.flameup.ai/api/v1/people/batch" \
 ```
 </CodeGroup>
 
-<Callout kind="warning">Maximum 100 people per batch request. For larger imports, split into multiple requests.</Callout>
+The response contains a `results` array with one entry per submitted record, plus a `total` count:
+
+```json
+{
+  "results": [
+    {
+      "type": "identify",
+      "index": 0,
+      "success": true,
+      "data": { "id": "550e8400-e29b-41d4-a716-446655440000", "userId": "user_001" }
+    },
+    {
+      "type": "identify",
+      "index": 1,
+      "success": false,
+      "error": "validation error message"
+    }
+  ],
+  "total": 2
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Operation type (`identify`) |
+| `index` | integer | Position of the record in the submitted `identify` array |
+| `success` | boolean | Whether this record was processed successfully |
+| `error` | string | Error message (present only when `success` is `false`) |
+| `data` | object | The resulting person object (present only when `success` is `true`) |
 
 ## Delete a Person
 
@@ -491,10 +480,12 @@ Delete a person and all associated data.
 
 **Endpoint:** `DELETE /api/v1/people/{id}`
 
+<Callout kind="info">The `{id}` path parameter is your external `userId`, not the Flameup `id` UUID.</Callout>
+
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/${personId}`,
+  `https://api.flameup.ai/api/v1/people/${userId}`,
   {
     method: 'DELETE',
     headers: {
@@ -510,32 +501,48 @@ if (response.ok) {
 
 ```python
 response = requests.delete(
-    f'https://api.flameup.ai/api/v1/people/{person_id}',
+    f'https://api.flameup.ai/api/v1/people/{user_id}',
     headers={'Authorization': f'Bearer {API_KEY}'}
 )
 
-if response.status_code == 204:
+if response.status_code == 200:
     print('Person deleted')
 ```
 
 ```bash
-curl -X DELETE "https://api.flameup.ai/api/v1/people/{person_id}" \
+curl -X DELETE "https://api.flameup.ai/api/v1/people/{userId}" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
+
+A successful delete returns `200 OK`:
+
+```json
+{
+  "message": "Person deleted successfully"
+}
+```
 
 <Callout kind="warning">This action is irreversible. All associated events and device tokens will also be deleted.</Callout>
 
 ## Get Person Events
 
-Retrieve events for a specific person.
+Retrieve events for a specific person. See the [Events API](/events) for how events are tracked.
 
 **Endpoint:** `GET /api/v1/people/{id}/events`
+
+<Callout kind="info">The `{id}` path parameter is your external `userId`. This endpoint requires the API key's `events:write` permission.</Callout>
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | integer | 50 | Number of events to return (max 500) |
 
 <CodeGroup>
 ```javascript
 const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/${personId}/events?limit=50`,
+  `https://api.flameup.ai/api/v1/people/${userId}/events?limit=50`,
   {
     headers: {
       'Authorization': `Bearer ${API_KEY}`
@@ -543,58 +550,22 @@ const response = await fetch(
   }
 );
 
-const { events } = await response.json();
+const { events, total } = await response.json();
 ```
 
 ```python
 response = requests.get(
-    f'https://api.flameup.ai/api/v1/people/{person_id}/events',
+    f'https://api.flameup.ai/api/v1/people/{user_id}/events',
     headers={'Authorization': f'Bearer {API_KEY}'},
     params={'limit': 50}
 )
 
-events = response.json()['events']
+data = response.json()
+events = data['events']
 ```
 
 ```bash
-curl "https://api.flameup.ai/api/v1/people/{person_id}/events?limit=50" \
-  -H "Authorization: Bearer your_api_key"
-```
-</CodeGroup>
-
-## Get People Statistics
-
-Get aggregate statistics for your workspace.
-
-**Endpoint:** `GET /api/v1/people/stats`
-
-<CodeGroup>
-```javascript
-const response = await fetch(
-  `https://api.flameup.ai/api/v1/people/stats`,
-  {
-    headers: {
-      'Authorization': `Bearer ${API_KEY}`
-    }
-  }
-);
-
-const stats = await response.json();
-console.log(`Total: ${stats.total}, Active: ${stats.active}`);
-```
-
-```python
-response = requests.get(
-    f'https://api.flameup.ai/api/v1/people/stats',
-    headers={'Authorization': f'Bearer {API_KEY}'}
-)
-
-stats = response.json()
-print(f"Total: {stats['total']}, Active: {stats['active']}")
-```
-
-```bash
-curl "https://api.flameup.ai/api/v1/people/stats" \
+curl "https://api.flameup.ai/api/v1/people/{userId}/events?limit=50" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
@@ -603,13 +574,21 @@ curl "https://api.flameup.ai/api/v1/people/stats" \
 
 ```json
 {
-  "total": 15420,
-  "active": 14200,
-  "unsubscribed": 850,
-  "bounced": 370,
-  "recent": 245
+  "events": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "purchase_completed",
+      "parameters": { "amount": 49.99, "currency": "USD" },
+      "created_at": "2024-01-20T14:45:00Z"
+    }
+  ],
+  "total": 1
 }
 ```
+
+Each event object contains the event name in the `type` field, along with its `parameters` and `created_at` timestamp.
+
+<Callout kind="info">Workspace-level people statistics are available in the Flameup dashboard.</Callout>
 
 ## Best Practices
 

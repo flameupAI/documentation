@@ -34,7 +34,6 @@ Flameup uses standard HTTP status codes:
 | `403` | Forbidden | Insufficient permissions |
 | `404` | Not Found | Resource doesn't exist |
 | `409` | Conflict | Resource already exists |
-| `422` | Unprocessable Entity | Validation failed |
 | `429` | Too Many Requests | Rate limit exceeded |
 | `500` | Internal Server Error | Server-side error |
 | `503` | Service Unavailable | Temporary unavailability |
@@ -43,18 +42,19 @@ Flameup uses standard HTTP status codes:
 
 ### Authentication Errors
 
+<Callout kind="info">Authentication and rate-limit failures use the flat response shape (`{"error": ..., "message": ...}`), not the typed `error.type` envelope.</Callout>
+
 <ExpandableGroup>
-  <Expandable title="unauthorized" default-open="true">
+  <Expandable title="Unauthorized" default-open="true">
     **HTTP Status:** 401
 
-    API key is missing or invalid.
+    API key is missing or invalid. Any authentication failure returns this generic 401 response.
 
     ```json
     {
-      "error": {
-        "code": "unauthorized",
-        "message": "Invalid or missing API key"
-      }
+      "error": "Unauthorized",
+      "message": "Invalid or expired API key",
+      "details": "Please provide a valid API key in the Authorization header: Bearer <your_api_key>"
     }
     ```
 
@@ -63,17 +63,15 @@ Flameup uses standard HTTP status codes:
     - Check the `Authorization` header is set with `Bearer` prefix
     - Ensure the key hasn't been revoked
   </Expandable>
-  <Expandable title="forbidden" default-open="false">
+  <Expandable title="Forbidden" default-open="false">
     **HTTP Status:** 403
 
-    API key lacks required permission.
+    The API key lacks a required permission. The response does not name the missing permission.
 
     ```json
     {
-      "error": {
-        "code": "forbidden",
-        "message": "API key lacks required permission: people:write"
-      }
+      "error": "Forbidden",
+      "message": "Insufficient permissions"
     }
     ```
 
@@ -81,58 +79,24 @@ Flameup uses standard HTTP status codes:
     - Check the API key's permissions in your dashboard
     - Create a new key with the required permissions
   </Expandable>
-  <Expandable title="key_expired" default-open="false">
-    **HTTP Status:** 401
-
-    API key has expired.
-
-    ```json
-    {
-      "error": {
-        "code": "key_expired",
-        "message": "API key expired on 2024-01-15"
-      }
-    }
-    ```
-
-    **Solutions:**
-    - Create a new API key
-    - Update the expiration date in your dashboard
-  </Expandable>
-  <Expandable title="ip_not_allowed" default-open="false">
-    **HTTP Status:** 403
-
-    Request from IP not in whitelist.
-
-    ```json
-    {
-      "error": {
-        "code": "ip_not_allowed",
-        "message": "IP address 192.168.1.100 not in whitelist"
-      }
-    }
-    ```
-
-    **Solutions:**
-    - Add the IP to the key's whitelist
-    - Remove IP restrictions if not needed
-  </Expandable>
 </ExpandableGroup>
 
 ### Resource Errors
 
 <ExpandableGroup>
-  <Expandable title="not_found" default-open="true">
+  <Expandable title="NOT_FOUND" default-open="true">
     **HTTP Status:** 404
 
-    The requested resource doesn't exist.
+    The requested resource doesn't exist. All not-found cases (including an unknown workspace) return this type.
 
     ```json
     {
+      "success": false,
       "error": {
-        "code": "not_found",
+        "type": "NOT_FOUND",
         "message": "Person with ID 'xyz' not found"
-      }
+      },
+      "request_id": "req_abc123"
     }
     ```
 
@@ -140,17 +104,19 @@ Flameup uses standard HTTP status codes:
     - Verify the resource ID is correct
     - Check you're using the right workspace
   </Expandable>
-  <Expandable title="already_exists" default-open="false">
+  <Expandable title="RESOURCE_CONFLICT" default-open="false">
     **HTTP Status:** 409
 
     Resource already exists (for unique constraints).
 
     ```json
     {
+      "success": false,
       "error": {
-        "code": "already_exists",
+        "type": "RESOURCE_CONFLICT",
         "message": "Person with email 'user@example.com' already exists"
-      }
+      },
+      "request_id": "req_abc123"
     }
     ```
 
@@ -158,46 +124,45 @@ Flameup uses standard HTTP status codes:
     - Use the upsert endpoint instead
     - Fetch and update the existing resource
   </Expandable>
-  <Expandable title="workspace_not_found" default-open="false">
-    **HTTP Status:** 404
+  <Expandable title="DUPLICATE_KEY" default-open="false">
+    **HTTP Status:** 409
 
-    The workspace doesn't exist or you don't have access.
+    A unique database constraint was violated (a duplicate key).
 
     ```json
     {
+      "success": false,
       "error": {
-        "code": "workspace_not_found",
-        "message": "Workspace 'ws_abc123' not found"
-      }
+        "type": "DUPLICATE_KEY",
+        "message": "Duplicate key"
+      },
+      "request_id": "req_abc123"
     }
     ```
 
     **Solutions:**
-    - Verify the workspace ID
-    - Check your API key has access to this workspace
+    - Use the upsert endpoint instead
+    - Fetch and update the existing resource
   </Expandable>
 </ExpandableGroup>
 
 ### Validation Errors
 
 <ExpandableGroup>
-  <Expandable title="validation_error" default-open="true">
-    **HTTP Status:** 422
+  <Expandable title="VALIDATION_ERROR" default-open="true">
+    **HTTP Status:** 400
 
-    Request body failed validation.
+    Request body or parameters failed validation. `details` is a string in the form `field: message`.
 
     ```json
     {
+      "success": false,
       "error": {
-        "code": "validation_error",
+        "type": "VALIDATION_ERROR",
         "message": "Validation failed",
-        "details": {
-          "fields": {
-            "email": "Invalid email format",
-            "userId": "Required field"
-          }
-        }
-      }
+        "details": "email: Invalid email format"
+      },
+      "request_id": "req_abc123"
     }
     ```
 
@@ -205,51 +170,15 @@ Flameup uses standard HTTP status codes:
     - Check the request body matches the API spec
     - Validate data before sending
   </Expandable>
-  <Expandable title="invalid_parameter" default-open="false">
-    **HTTP Status:** 400
-
-    A query parameter or path parameter is invalid.
-
-    ```json
-    {
-      "error": {
-        "code": "invalid_parameter",
-        "message": "Invalid value for 'limit': must be between 1 and 100"
-      }
-    }
-    ```
-
-    **Solutions:**
-    - Check parameter constraints in the API docs
-    - Use valid values for enums and ranges
-  </Expandable>
-  <Expandable title="batch_limit_exceeded" default-open="false">
-    **HTTP Status:** 400
-
-    Too many items in a batch request.
-
-    ```json
-    {
-      "error": {
-        "code": "batch_limit_exceeded",
-        "message": "Maximum 100 people per batch request"
-      }
-    }
-    ```
-
-    **Solutions:**
-    - Split the batch into smaller chunks
-    - Process up to 100 items per request
-  </Expandable>
 </ExpandableGroup>
 
 ### Rate Limiting Errors
 
 <ExpandableGroup>
-  <Expandable title="rate_limit_exceeded" default-open="true">
+  <Expandable title="Rate limit exceeded" default-open="true">
     **HTTP Status:** 429
 
-    Too many requests in a time window.
+    Too many requests in a time window. This response uses the flat shape and includes `X-RateLimit-*` headers.
 
     ```json
     {
@@ -261,7 +190,7 @@ Flameup uses standard HTTP status codes:
     **Solutions:**
     - Check the `X-RateLimit-Reset` header for when to retry
     - Implement exponential backoff
-    - Consider upgrading your plan for higher limits
+    - Contact support if you need a higher limit
   </Expandable>
 </ExpandableGroup>
 
@@ -365,7 +294,7 @@ Log errors with context for debugging:
 ```javascript
 function logError(error, context) {
   console.error('Flameup API Error', {
-    code: error.code,
+    type: error.type,
     message: error.message,
     details: error.details,
     context: {
@@ -384,16 +313,16 @@ Map error codes to user-friendly messages:
 
 ```javascript
 const ERROR_MESSAGES = {
-  unauthorized: 'Please check your API credentials',
-  forbidden: 'You don\'t have permission for this action',
-  not_found: 'The requested item was not found',
-  validation_error: 'Please check your input and try again',
-  rate_limit_exceeded: 'Too many requests. Please wait a moment.',
+  UNAUTHORIZED: 'Please check your API credentials',
+  FORBIDDEN: 'You don\'t have permission for this action',
+  NOT_FOUND: 'The requested item was not found',
+  VALIDATION_ERROR: 'Please check your input and try again',
+  RATE_LIMIT: 'Too many requests. Please wait a moment.',
   default: 'Something went wrong. Please try again.'
 };
 
-function getUserMessage(errorCode) {
-  return ERROR_MESSAGES[errorCode] || ERROR_MESSAGES.default;
+function getUserMessage(errorType) {
+  return ERROR_MESSAGES[errorType] || ERROR_MESSAGES.default;
 }
 ```
 
@@ -404,5 +333,5 @@ function getUserMessage(errorCode) {
 1. **Check the response body** - Error details are always in the response
 2. **Verify API key permissions** - Most 403 errors are permission issues
 3. **Validate request format** - Use the API reference for correct schemas
-4. **Check rate limit headers** - Monitor `X-RateLimit-*` headers
-5. **Use test environment** - Debug in test before going to production
+4. **Check rate limit headers** - Monitor `X-RateLimit-*` headers (returned on `429` responses)
+5. **Include the request ID** - Provide the `request_id` from error responses when contacting support

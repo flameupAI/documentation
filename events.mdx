@@ -7,7 +7,7 @@ description: Track user behavior and actions with the Flameup Events API
 
 The Events API allows you to track user actions and behaviors in your application. Events power analytics, trigger campaigns, and help you understand how users interact with your product.
 
-<Callout kind="info">**Required Permission**: `events:read` for GET requests, `events:write` for POST requests.</Callout>
+<Callout kind="info">**Required Permission**: `events:write` for all Events API endpoints, including GET requests.</Callout>
 
 ## Event Object
 
@@ -15,28 +15,27 @@ An event in Flameup has the following structure:
 
 ```json
 {
-  "id": "evt_550e8400e29b41d4a716446655440000",
-  "workspace_id": "ws_abc123",
-  "person_id": "550e8400-e29b-41d4-a716-446655440000",
-  "event": "purchase_completed",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "type": "purchase_completed",
   "parameters": {
     "order_id": "order_789",
     "amount": 99.99,
     "currency": "USD",
     "items": ["product_a", "product_b"]
   },
-  "timestamp": "2024-01-15T10:30:00Z",
   "created_at": "2024-01-15T10:30:01Z"
 }
 ```
 
 ### Field Reference
 
+These are the fields accepted in a track request body:
+
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `external_id` | string | Yes | Your identifier for the user |
 | `event` | string | Yes | Name of the event (e.g., "signup", "purchase") |
-| `parameters` | object | No | Additional data about the event |
+| `external_id` | string | Yes | Your identifier for the user. Also accepted as `userId` or `user_id` |
+| `parameters` | object | No | Additional data about the event. Also accepted as `properties` |
 | `timestamp` | timestamp | No | When the event occurred (defaults to now) |
 
 ## Track an Event
@@ -145,12 +144,24 @@ curl -X POST "https://api.flameup.ai/api/v1/track" \
 ```
 </CodeGroup>
 
-**Response:**
+**Response** (`201 Created`):
 
 ```json
 {
   "success": true,
-  "event_id": "evt_550e8400e29b41d4a716446655440000"
+  "data": {
+    "event_id": "550e8400-e29b-41d4-a716-446655440000",
+    "person_id": "550e8400-e29b-41d4-a716-446655440001",
+    "event": "purchase_completed",
+    "parameters": {
+      "order_id": "order_789",
+      "amount": 99.99,
+      "currency": "USD"
+    },
+    "timestamp": "2024-01-15T10:30:00Z",
+    "processed_at": "2024-01-15T10:30:01Z",
+    "status": "processed"
+  }
 }
 ```
 
@@ -241,6 +252,34 @@ curl -X POST "https://api.flameup.ai/api/v1/track/batch" \
 
 <Callout kind="warning">Maximum 100 events per batch request. For larger volumes, split into multiple requests.</Callout>
 
+**Response** (`201 Created` when all events succeed):
+
+```json
+{
+  "success": true,
+  "processed": 2,
+  "total": 2,
+  "results": [
+    { "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" },
+    { "event_id": "660e8400-e29b-41d4-a716-446655440111", "person_id": "...", "event": "button_clicked", "status": "processed" }
+  ]
+}
+```
+
+If some events fail, the request returns `207 Multi-Status` with an `errors` array and `success: false`:
+
+```json
+{
+  "success": false,
+  "processed": 1,
+  "total": 2,
+  "results": [
+    { "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" }
+  ],
+  "errors": ["external_id or userId is required"]
+}
+```
+
 ## Get Person Events
 
 Retrieve events for a specific person.
@@ -252,17 +291,11 @@ Retrieve events for a specific person.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `limit` | integer | 50 | Number of results (max 500) |
-| `offset` | integer | 0 | Pagination offset |
-| `event` | string | - | Filter by event name |
-| `since` | timestamp | - | Events after this time |
-| `until` | timestamp | - | Events before this time |
 
 <CodeGroup>
 ```javascript
 const params = new URLSearchParams({
-  limit: '100',
-  event: 'purchase_completed',
-  since: '2024-01-01T00:00:00Z'
+  limit: '100'
 });
 
 const response = await fetch(
@@ -282,9 +315,7 @@ response = requests.get(
     f'https://api.flameup.ai/api/v1/people/{person_id}/events',
     headers={'Authorization': f'Bearer {API_KEY}'},
     params={
-        'limit': 100,
-        'event': 'purchase_completed',
-        'since': '2024-01-01T00:00:00Z'
+        'limit': 100
     }
 )
 
@@ -293,7 +324,7 @@ events = data['events']
 ```
 
 ```bash
-curl "https://api.flameup.ai/api/v1/people/{person_id}/events?limit=100&event=purchase_completed" \
+curl "https://api.flameup.ai/api/v1/people/{person_id}/events?limit=100" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>

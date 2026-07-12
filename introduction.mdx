@@ -69,8 +69,7 @@ Understanding these key concepts will help you get the most out of Flameup:
   <Expandable title="API Keys" default-open="false">
     API keys authenticate your requests and determine what actions you can perform.
 
-    - **Live keys**: For production use (`ws_live_{workspace}_{random}.{secret}`)
-    - **Test keys**: For development and testing (`ws_test_{workspace}_{random}.{secret}`)
+    - **Format**: `ws_live_{workspace}_{random}.{secret}`
     - **Permissions**: Granular control over read/write access
 
     See the [Authentication](/authentication) guide for details.
@@ -116,7 +115,7 @@ const BASE_URL = 'https://api.flameup.ai/api/v1';
 
 // Identify a user
 const response = await fetch(
-  `${BASE_URL}/workspaces/${WORKSPACE_ID}/people`,
+  `${BASE_URL}/people`,
   {
     method: 'POST',
     headers: {
@@ -148,7 +147,7 @@ BASE_URL = 'https://api.flameup.ai/api/v1'
 
 # Identify a user
 response = requests.post(
-    f'{BASE_URL}/workspaces/{WORKSPACE_ID}/people',
+    f'{BASE_URL}/people',
     headers={
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {API_KEY}'
@@ -170,7 +169,7 @@ print(f"User created: {user['id']}")
 
 ```bash
 # Identify a user with cURL
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/people" \
+curl -X POST "https://api.flameup.ai/api/v1/people" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
   -d '{
