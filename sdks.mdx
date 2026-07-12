@@ -38,9 +38,19 @@ class Flameup {
     this.baseUrl = 'https://api.flameup.ai/api/v1';
   }
 
+  // Workspace-scoped request (used by push and other automation endpoints)
   async request(endpoint, options = {}) {
     const url = `${this.baseUrl}/workspaces/${this.workspaceId}${endpoint}`;
+    return this._send(url, options);
+  }
 
+  // Workspace-agnostic request (the People API-key surface lives at /api/v1/people)
+  async apiRequest(endpoint, options = {}) {
+    const url = `${this.baseUrl}${endpoint}`;
+    return this._send(url, options);
+  }
+
+  async _send(url, options = {}) {
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -58,17 +68,17 @@ class Flameup {
     return response.json();
   }
 
-  // People
+  // People (API key targets the workspace-agnostic /api/v1/people path)
   async identifyUser(userId, traits = {}) {
-    return this.request('/people', {
+    return this.apiRequest('/people', {
       method: 'POST',
       body: JSON.stringify({ userId, traits })
     });
   }
 
   async getUser(userId) {
-    const result = await this.request(`/people/search?external_id=${userId}`);
-    return result.people[0] || null;
+    // userId is the external user ID you assigned; returns the person object
+    return this.apiRequest(`/people/${userId}`);
   }
 
   // Events (uses /api/v1/track endpoint directly)
@@ -128,8 +138,8 @@ const flare = axios.create({
   }
 });
 
-// Identify user
-await flare.post('/workspaces/ws_abc123/people', {
+// Identify user (People API key surface is workspace-agnostic)
+await flare.post('/people', {
   userId: 'user_123',
   email: 'jane@example.com',
   traits: { first_name: 'Jane' }
@@ -163,12 +173,13 @@ class Flameup:
         })
 
     def _url(self, endpoint):
+        # Workspace-scoped URL, used by push and other automation endpoints
         return f'{self.base_url}/workspaces/{self.workspace_id}{endpoint}'
 
     def identify(self, user_id, traits=None):
-        """Create or update a user profile."""
+        """Create or update a user profile (People API key surface is workspace-agnostic)."""
         return self.session.post(
-            self._url('/people'),
+            f'{self.base_url}/people',
             json={'userId': user_id, 'traits': traits or {}}
         ).json()
 
@@ -226,12 +237,10 @@ class AsyncFlameup:
             }
         )
 
-    def _url(self, endpoint):
-        return f'{self.base_url}/workspaces/{self.workspace_id}{endpoint}'
-
     async def identify(self, user_id, traits=None):
+        # People API key surface is workspace-agnostic (/api/v1/people)
         response = await self.client.post(
-            self._url('/people'),
+            f'{self.base_url}/people',
             json={'userId': user_id, 'traits': traits or {}}
         )
         return response.json()
@@ -279,7 +288,7 @@ class Flameup {
     }
 
     func identify(userId: String, traits: [String: Any] = [:]) async throws {
-        let url = URL(string: "\(baseURL)/workspaces/\(workspaceId)/people")!
+        let url = URL(string: "\(baseURL)/people")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -359,7 +368,7 @@ class Flameup(
             }
 
             val request = Request.Builder()
-                .url("$baseUrl/workspaces/$workspaceId/people")
+                .url("$baseUrl/people")
                 .post(body.toString().toRequestBody(jsonMediaType))
                 .header("Authorization", "Bearer $apiKey")
                 .build()
@@ -455,8 +464,8 @@ For quick testing or shell scripts:
 export FLARE_API_KEY="ws_live_abc12345_abc123.your_secret_here"
 export WORKSPACE_ID="ws_abc123"
 
-# Identify a user
-curl -X POST "https://api.flameup.ai/api/v1/workspaces/$WORKSPACE_ID/people" \
+# Identify a user (People API key surface is workspace-agnostic)
+curl -X POST "https://api.flameup.ai/api/v1/people" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $FLARE_API_KEY" \
   -d '{"userId": "user_123", "email": "jane@example.com"}'
@@ -470,15 +479,20 @@ curl -X POST "https://api.flameup.ai/api/v1/track" \
 
 ## OpenAPI Specification
 
-Use our OpenAPI spec to generate clients in any language:
+Use our OpenAPI spec to generate clients in any language.
 
-- **Spec URL**: See the [API Reference](/api-reference)
+- **Spec URL**: `GET https://api.flameup.ai/api/v1/docs/openapi` — the spec is served as JSON (not a static `openapi.yaml`).
+- **Access**: This endpoint is protected by monitoring basic-auth, so download the spec with credentials first and point your generator at the local file rather than the URL.
 - **Generators**: Use [OpenAPI Generator](https://openapi-generator.tech/) or similar tools
 
 ```bash
-# Generate a TypeScript client
+# Download the spec (monitoring basic-auth required)
+curl -u "$MONITORING_USER:$MONITORING_PASS" \
+  "https://api.flameup.ai/api/v1/docs/openapi" -o openapi.json
+
+# Generate a TypeScript client from the downloaded spec
 openapi-generator generate \
-  -i https://api.flameup.ai/openapi.yaml \
+  -i openapi.json \
   -g typescript-fetch \
   -o ./flare-client
 ```

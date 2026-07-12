@@ -64,25 +64,6 @@ curl -X GET "https://api.flameup.ai/api/v1/people" \
 ```
 </CodeGroup>
 
-## API Key Environments
-
-Flameup provides two environments for your API keys:
-
-<Columns cols={2}>
-  <Card title="Live Keys" icon="check-circle">
-    **Prefix:** `ws_live_...`
-
-    Use for production applications. Events and data are stored permanently.
-  </Card>
-  <Card title="Test Keys" icon="flask">
-    **Prefix:** `ws_test_...`
-
-    Use for development and testing. Safe for experimentation.
-  </Card>
-</Columns>
-
-<Callout kind="info">Test and live environments are completely isolated. Data created with test keys won't appear in your live environment.</Callout>
-
 ## Permissions
 
 API keys have granular permissions that control access to different resources:
@@ -96,8 +77,8 @@ API keys have granular permissions that control access to different resources:
 | **Campaigns** | `campaigns:read`, `campaigns:write`, `campaigns:trigger` | Manage and trigger campaigns |
 | **Analytics** | `analytics:read` | Access reporting data |
 | **Workspace** | `workspace:read`, `workspace:write` | Workspace settings |
-| **Devices** | `devices:write` | Register push notification tokens |
-| **Admin** | `admin`, `*` | Full access to all resources |
+| **Devices** | `devices:*` | Register push tokens — no granular scope yet; requires a `devices:*` wildcard or a full-access `*` key |
+| **Full Access** | `*` | Wildcard granting access to all resources |
 
 ### Common Permission Sets
 
@@ -165,10 +146,7 @@ API keys have granular permissions that control access to different resources:
   <Step title="Create New Key" icon="plus">
     Click "Create API Key" and provide:
     - **Name**: A descriptive name (e.g., "Backend Server", "Mobile App")
-    - **Environment**: Live or Test
     - **Permissions**: Select the required permissions
-    - **Expiration** (optional): Set an expiry date
-    - **IP Whitelist** (optional): Restrict to specific IPs
   </Step>
   <Step title="Copy Your Key" icon="copy">
     Copy the full API key immediately. For security, the full key is only shown once.
@@ -178,30 +156,6 @@ API keys have granular permissions that control access to different resources:
 <Callout kind="warning">The full API key is only displayed once when created. Store it securely - you cannot retrieve it later.</Callout>
 
 ## Security Features
-
-### IP Whitelisting
-
-Restrict API key usage to specific IP addresses or CIDR ranges:
-
-```json
-{
-  "ip_whitelist": [
-    "192.168.1.100",
-    "10.0.0.0/8",
-    "2001:db8::/32"
-  ]
-}
-```
-
-### Key Expiration
-
-Set an expiration date for API keys that should only be valid for a limited time:
-
-```json
-{
-  "expires_at": "2025-12-31T23:59:59Z"
-}
-```
 
 ### Key Rotation
 
@@ -220,10 +174,9 @@ Returned when no API key is provided or the key is invalid:
 
 ```json
 {
-  "error": {
-    "code": "unauthorized",
-    "message": "Invalid or missing API key"
-  }
+  "error": "Unauthorized",
+  "message": "Invalid or expired API key",
+  "details": "Please provide a valid API key in the Authorization header: Bearer <your_api_key>"
 }
 ```
 
@@ -233,10 +186,8 @@ Returned when the API key doesn't have the required permissions:
 
 ```json
 {
-  "error": {
-    "code": "forbidden",
-    "message": "API key lacks required permission: people:write"
-  }
+  "error": "Forbidden",
+  "message": "Insufficient permissions"
 }
 ```
 
@@ -246,11 +197,8 @@ Returned when rate limits are exceeded:
 
 ```json
 {
-  "error": {
-    "code": "rate_limit_exceeded",
-    "message": "Rate limit exceeded. Retry after 60 seconds.",
-    "retry_after": 60
-  }
+  "error": "Rate limit exceeded",
+  "message": "Too many requests. Please try again later."
 }
 ```
 
@@ -265,9 +213,6 @@ Returned when rate limits are exceeded:
   </Expandable>
   <Expandable title="Rotate Keys Regularly" default-open="false">
     Rotate API keys periodically, especially for production systems. This limits the impact if a key is compromised.
-  </Expandable>
-  <Expandable title="Use IP Whitelisting" default-open="false">
-    For server-to-server communication, restrict API keys to known IP addresses to prevent unauthorized access.
   </Expandable>
   <Expandable title="Monitor Key Usage" default-open="false">
     Regularly review API key usage in your dashboard to detect unusual patterns that might indicate compromise.
