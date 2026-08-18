@@ -219,7 +219,7 @@ curl -X POST "https://api.flameup.ai/api/v1/track" \
 
 If your app uses push notifications, register the device token:
 
-<Callout kind="warning">Device registration currently requires a **full-access** API key (`*`) — there is no grantable `devices` scope yet. Create a separate full-access key for this step, or skip ahead to Step 5.</Callout>
+<Callout kind="warning">Device registration requires the `devices:write` scope. The dashboard's key editor does not offer a Devices category yet, so a key created in the UI will get `403 Insufficient permissions` here — create a key with `devices:write` (or `devices:*`, or full access `*`) through the API keys endpoint, or skip ahead to Step 5.</Callout>
 
 <CodeGroup>
 ```javascript

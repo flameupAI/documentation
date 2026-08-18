@@ -291,6 +291,10 @@ paths:
                       $ref: '#/components/schemas/Person'
 
   /workspaces/{workspaceId}/people/stats:
+    description: >-
+      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
+      session, not an API key — calling it with an API key fails. There is no
+      API-key equivalent for this route.
     get:
       tags:
         - People
@@ -319,6 +323,10 @@ paths:
                     type: integer
 
   /workspaces/{workspaceId}/people/{personId}/events:
+    description: >-
+      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
+      session, not an API key — calling it with an API key fails. There is no
+      API-key equivalent for this route.
     get:
       tags:
         - People
@@ -347,6 +355,10 @@ paths:
                       $ref: '#/components/schemas/Event'
 
   /workspaces/{workspaceId}/events:
+    description: >-
+      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
+      session, not an API key — calling it with an API key fails. There is no
+      API-key equivalent for this route.
     get:
       tags:
         - Events
@@ -427,31 +439,22 @@ paths:
                   event_id:
                     type: string
 
-  /workspaces/{workspaceId}/devices:
+  /people/{personId}/devices:
     get:
       tags:
         - Devices
-      summary: List devices
-      description: Retrieve device tokens for the workspace.
-      operationId: listDevices
+      summary: List devices for a person
+      description: |
+        Retrieve all device tokens registered for a person. The workspace is resolved
+        from the API key, so it is not part of the path.
+
+        This endpoint takes no query parameters and is not paginated. Devices are ordered
+        by `last_used_at` (most recent first), then `created_at` descending.
+
+        Guarded by the `devices:write` permission (not `devices:read`).
+      operationId: listPersonDevices
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: person_id
-          in: query
-          description: Filter by person
-          schema:
-            type: string
-            format: uuid
-        - name: platform
-          in: query
-          description: Filter by platform (web coming soon)
-          schema:
-            type: string
-            enum: [ios, android, web]
-        - name: is_active
-          in: query
-          schema:
-            type: boolean
+        - $ref: '#/components/parameters/PersonUUID'
       responses:
         '200':
           description: Device list
@@ -460,18 +463,35 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
                   devices:
                     type: array
                     items:
                       $ref: '#/components/schemas/Device'
+                  count:
+                    type: integer
+                    description: Number of devices returned
+        '400':
+          description: Invalid person ID
+        '403':
+          description: API key lacks the `devices:write` permission
     post:
       tags:
         - Devices
       summary: Register device
-      description: Register a device token for push notifications.
+      description: |
+        Register a device token for push notifications. The workspace is resolved from
+        the API key, and the person is identified by the UUID in the path — neither
+        belongs in the request body.
+
+        Re-posting the same token updates the existing device record rather than
+        creating a duplicate; use this to refresh `app_version` or `os_version`.
+
+        Guarded by the `devices:write` permission.
       operationId: registerDevice
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/PersonUUID'
       requestBody:
         required: true
         content:
@@ -479,60 +499,75 @@ paths:
             schema:
               $ref: '#/components/schemas/RegisterDeviceRequest'
       responses:
-        '201':
+        '200':
           description: Device registered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Device'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  device_id:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+        '400':
+          description: Validation failed, or the person ID is not a valid UUID
+        '403':
+          description: API key lacks `devices:write`, or the person belongs to another workspace
+        '404':
+          description: Person not found
+        '409':
+          description: Cannot register a device for an inactive person
 
-  /workspaces/{workspaceId}/devices/{deviceId}:
-    put:
-      tags:
-        - Devices
-      summary: Update device
-      description: Update device information.
-      operationId: updateDevice
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                app_version:
-                  type: string
-                os_version:
-                  type: string
-      responses:
-        '200':
-          description: Device updated
+  /people/{personId}/devices/{token}:
     delete:
       tags:
         - Devices
-      summary: Delete device
-      description: Remove a device token.
-      operationId: deleteDevice
+      summary: Unregister device
+      description: |
+        Unregister a device by its **token**, not by a device UUID. The token must be
+        URL-encoded, as FCM/APNs tokens contain characters that are unsafe in a path.
+
+        The device is invalidated rather than hard-deleted, so it stops receiving push
+        but remains in the record for auditing.
+
+        Guarded by the `devices:write` permission.
+      operationId: unregisterDevice
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: deviceId
+        - $ref: '#/components/parameters/PersonUUID'
+        - name: token
           in: path
           required: true
+          description: The URL-encoded FCM/APNs device token
           schema:
             type: string
-            format: uuid
       responses:
-        '204':
-          description: Device deleted
+        '200':
+          description: Device unregistered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          description: Invalid person ID
+        '403':
+          description: API key lacks the `devices:write` permission
+        '404':
+          description: Device not found
 
   /workspaces/{workspaceId}/campaigns:
+    description: >-
+      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
+      session, not an API key — calling it with an API key fails. There is no
+      API-key equivalent for this route.
     get:
       tags:
         - Campaigns
@@ -588,6 +623,10 @@ paths:
                 $ref: '#/components/schemas/Campaign'
 
   /workspaces/{workspaceId}/campaigns/{campaignId}:
+    description: >-
+      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
+      session, not an API key — calling it with an API key fails. There is no
+      API-key equivalent for this route.
     get:
       tags:
         - Campaigns
@@ -631,15 +670,17 @@ paths:
         '204':
           description: Campaign deleted
 
-  /workspaces/{workspaceId}/campaigns/{campaignId}/trigger:
+  /campaigns/{campaignId}/trigger:
     post:
       tags:
         - Campaigns
       summary: Trigger campaign
-      description: Manually trigger a campaign for specific users.
+      description: >-
+        Manually trigger a campaign for its configured audience. This route is
+        workspace-agnostic — the workspace comes from the API key, so it must NOT
+        be included in the path. Requires the `campaigns:trigger` permission.
       operationId: triggerCampaign
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/CampaignId'
       requestBody:
         content:
@@ -668,13 +709,16 @@ paths:
                   recipients_count:
                     type: integer
 
-  /workspaces/{workspaceId}/transactional/send:
+  /workspaces/{workspaceId}/push/send:
     post:
       tags:
         - Transactional
-      summary: Send transactional message
-      description: Send a one-off push notification to a user.
-      operationId: sendTransactional
+      summary: Send transactional push
+      description: >-
+        Send a one-off push notification to a user. Unlike most API-key routes, this
+        one IS workspace-scoped, and the workspace in the path must match the one the
+        API key belongs to.
+      operationId: sendTransactionalPush
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
@@ -709,6 +753,12 @@ components:
       type: http
       scheme: bearer
       description: Your Flameup API key (passed as Bearer token)
+    DashboardAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        A Firebase ID token from a signed-in dashboard session. Endpoints using this
+        scheme are NOT callable with an API key and will reject one.
 
   parameters:
     WorkspaceId:
@@ -723,6 +773,16 @@ components:
       in: path
       required: true
       description: Person ID (UUID)
+      schema:
+        type: string
+        format: uuid
+    PersonUUID:
+      name: personId
+      in: path
+      required: true
+      description: >-
+        The Flameup person UUID — the `id` returned when creating or upserting a person.
+        This is NOT your external `userId`.
       schema:
         type: string
         format: uuid
@@ -874,6 +934,7 @@ components:
           format: uuid
         workspace_id:
           type: string
+          format: uuid
         person_id:
           type: string
           format: uuid
@@ -898,23 +959,31 @@ components:
         last_used_at:
           type: string
           format: date-time
+        registration_count:
+          type: integer
+          description: Number of times this token has been re-registered
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
     RegisterDeviceRequest:
       type: object
       required:
-        - person_id
-        - device_token
+        - token
         - platform
       properties:
-        person_id:
+        token:
           type: string
-          format: uuid
-        device_token:
-          type: string
-          description: FCM/APNs token
+          minLength: 10
+          maxLength: 4096
+          description: >-
+            The FCM/APNs token from the device. Note the asymmetry: this field is named
+            `token` on the way in, but is returned as `device_token` on the Device object.
+            The person and workspace are taken from the path and the API key respectively,
+            so `person_id` and `workspace_id` are not accepted here.
         platform:
           type: string
           description: Device platform (web coming soon)

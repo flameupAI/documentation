@@ -481,18 +481,15 @@ curl -X POST "https://api.flameup.ai/api/v1/track" \
 
 Use our OpenAPI spec to generate clients in any language.
 
-- **Spec URL**: `GET https://api.flameup.ai/api/v1/docs/openapi` — the spec is served as JSON (not a static `openapi.yaml`).
-- **Access**: This endpoint is protected by monitoring basic-auth, so download the spec with credentials first and point your generator at the local file rather than the URL.
+<Callout kind="warning">Do not generate clients from `GET /api/v1/docs/openapi`. That endpoint returns a minimal internal stub covering only `/health`, `/events`, and `/workspaces` — it does not describe People, Devices, Track, or Campaigns, so a generated client will be missing nearly the whole API.</Callout>
+
+- **Spec**: The complete specification is the one backing the **API Reference** tab of these docs. Use it as your generator input.
 - **Generators**: Use [OpenAPI Generator](https://openapi-generator.tech/) or similar tools
 
 ```bash
-# Download the spec (monitoring basic-auth required)
-curl -u "$MONITORING_USER:$MONITORING_PASS" \
-  "https://api.flameup.ai/api/v1/docs/openapi" -o openapi.json
-
-# Generate a TypeScript client from the downloaded spec
+# Generate a TypeScript client from the full spec
 openapi-generator generate \
-  -i openapi.json \
+  -i openapi.yaml \
   -g typescript-fetch \
   -o ./flare-client
 ```
