@@ -412,48 +412,110 @@ lifecycleScope.launch {
 
 ### Flutter (Dart)
 
+<Callout kind="warning">There is no published `flameup_flutter` package, and no `sdk/flutter` directory in the Flameup repositories. Do not add a git dependency for one. Flutter integration is a small file you copy into your app and edit, built on plain HTTPS plus `firebase_messaging`.</Callout>
+
+The reference client is `flameup_mobile.dart`, which exposes a single `FlameUpPush` class covering the one thing an app must do: obtain the FCM token, register it against a person, and keep it current when FCM rotates it.
+
+**Dependencies:**
+
 ```yaml
 # pubspec.yaml
 dependencies:
-  flameup_flutter:
-    git:
-      url: https://github.com/flameupAI/flare.git
-      path: sdk/flutter
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  http: ^1.2.0
 ```
+
+Android also needs `android/app/google-services.json` from your Firebase project.
+
+#### Choosing a mode
+
+`FlameUpPush` has two constructors. The difference is whether a Flameup credential ships inside your app bundle.
+
+| Mode | Ships in the app | Backend needed | Trade-off |
+|------|------------------|----------------|-----------|
+| `FlameUpPush.viaRelay` | Nothing | An endpoint of yours that holds the workspace key | No credential in the bundle. Recommended when you already have a backend |
+| `FlameUpPush.direct` | A `devices:register` key + the person UUID | One call at login to hand the app its person UUID | No relay to build. The key can register and unregister devices against UUIDs it already knows, and nothing else |
+
+<Callout kind="warning">If you use `direct`, scope the key to `devices:register` **only**. Adding `events:write` turns it into a person-read oracle: `POST /identify` returns an existing person's full stored record, so a key extracted from an APK can be looped over user ids to read your person table.</Callout>
+
+#### Relay mode
+
+The app never holds a Flameup key. It posts the token to your own backend, which resolves the person UUID from the session and forwards to Flameup.
 
 ```dart
-import 'package:flameup_flutter/flameup.dart';
-
-// 1. Initialize
-final flameup = Flameup(FlameupConfig(
-  apiKey: 'ws_live_abc12345_abc123.your_secret_here',
-));
-
-// 2. Identify user on login
-final person = await flameup.identify(
-  userId: 'user_123',
-  email: 'jane@example.com',
-  traits: {'first_name': 'Jane', 'plan': 'premium'},
+final push = FlameUpPush.viaRelay(
+  deviceRegistrationEndpoint: Uri.parse('https://api.yourapp.com/push/device'),
+  sessionToken: () => auth.accessToken,
+  deviceMetadata: {'app_version': '2.2.39', 'os_version': '15'},
 );
 
-// 3. Track events (zero latency — queued & batched automatically)
-flameup.track(
-  externalId: 'user_123',
-  event: 'add_to_cart',
-  parameters: {'product_id': 'prod_001', 'price': 49.99},
-);
-
-// 4. Register device for push notifications
-await flameup.registerDevice(
-  personId: person.id!,
-  token: fcmToken,
-  platform: 'ios',
-  deviceInfo: DeviceInfo(
-    deviceName: 'iPhone 15 Pro',
-    appVersion: '2.1.0',
-  ),
-);
+await push.start();
 ```
+
+Your backend handler then registers with the workspace key:
+
+```
+person = identify(currentUser.id)        // -> person.id (the Flameup UUID)
+registerDevice(person.id, {token, platform})
+```
+
+#### Direct mode
+
+```dart
+// personId comes from your own backend at login — cache it with the session.
+final push = FlameUpPush.direct(
+  apiKey: const String.fromEnvironment('FLAMEUP_DEVICE_KEY'),
+  personId: () => session.flameupPersonId,
+  deviceMetadata: {'app_version': '2.2.39', 'device_model': 'Pixel 7'},
+);
+
+await push.start();
+
+// On logout, so the device stops receiving that user's pushes:
+await push.unregister(await FirebaseMessaging.instance.getToken() ?? '');
+```
+
+<Callout kind="tip">`personId` is a callback, not a value, so it is resolved per request. When one user logs out and another logs in, registration follows the person actually signed in — no need to rebuild the client.</Callout>
+
+`unregister()` is direct-mode only. In relay mode it throws, because the app has no key; route logout through your backend, which calls `DELETE /api/v1/people/{personId}/devices/{token}`.
+
+#### What `start()` does
+
+`start()` requests notification permission, obtains the FCM token, registers it, and subscribes to `onTokenRefresh` so rotated tokens re-register automatically.
+
+<Callout kind="warning">Wire `onTokenRefresh`, not just `getToken()`. FCM rotates device tokens, and a stale token drops every push silently — with no error anywhere in your logs. Calling `start()` handles this for you.</Callout>
+
+#### Required scope
+
+Device registration needs `devices:register` or `devices:write`:
+
+| Scope | POST / DELETE a device | GET (list) devices |
+|-------|------------------------|--------------------|
+| `devices:register` | Yes | **No** — deliberately excluded |
+| `devices:write` | Yes | Yes |
+| `devices:read` | No | Yes |
+
+`devices:register` exists precisely so an app can enrol the device it is running on without being able to enumerate every device token in the workspace. Use it for `direct` mode, never `devices:write`.
+
+<Callout kind="info">The dashboard's key editor does not offer a Devices category yet, so these scopes can only be granted when creating a key through the API. See [Authentication](/authentication).</Callout>
+
+#### Errors worth handling
+
+`FlameUpPushError` carries the HTTP status. The ones that mean something specific:
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Malformed person UUID or body. `personId` must be the Flameup UUID, not your own user id |
+| `401` / `403` | Key rejected, the key lacks `devices:register`, or the person belongs to another workspace |
+| `404` | Person not found — identify the user before registering |
+| `409` | Person is inactive; reactivate before registering a device |
+
+<Callout kind="warning">The most common integration bug: `personId` is Flameup's person **UUID**, not your external user id. Take it from `person.id` in the identify response and store it alongside your user record. Passing your own user id returns `400`, because the handler parses the path segment as a UUID.</Callout>
+
+`platform` is derived automatically and is always exactly `ios`, `android`, or `web` — the API rejects anything else with `400`. The client checks `kIsWeb` before `defaultTargetPlatform`, since the latter reports the host OS on web builds and would otherwise register a browser on a Mac as `ios`.
+
+<Callout kind="tip">Push delivery also requires your workspace's FCM credentials to be uploaded in the dashboard (Settings → Messaging Channels → Push). Until that is done, registration and journeys work normally and simply stop at the delivery step.</Callout>
 
 ## cURL Examples
 

@@ -77,7 +77,7 @@ API keys have granular permissions that control access to different resources:
 | **Campaigns** | `campaigns:read`, `campaigns:write`, `campaigns:trigger` | Manage and trigger campaigns |
 | **Analytics** | `analytics:read` | Access reporting data |
 | **Workspace** | `workspace:read`, `workspace:write` | Workspace settings |
-| **Devices** | `devices:read`, `devices:write` | Register and list push tokens. All device routes check `devices:write`, so `devices:read` currently grants nothing. Grantable only when creating a key via the API — the dashboard editor has no Devices category yet |
+| **Devices** | `devices:register`, `devices:read`, `devices:write` | `devices:register` registers/unregisters only (safe to embed in a mobile app); `devices:read` lists only; `devices:write` does both. Grantable only when creating a key via the API — the dashboard editor has no Devices category yet |
 | **Full Access** | `*` | Wildcard granting access to all resources |
 
 ### Common Permission Sets

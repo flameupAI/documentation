@@ -7,9 +7,17 @@ description: Register and manage device tokens for push notifications
 
 The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
 
-<Callout kind="info">**Required Permission**: every device endpoint — including the read-only List Devices — is guarded by `devices:write`. The `devices:read` scope exists but currently grants access to nothing, so do not rely on it.</Callout>
+<Callout kind="info">**Required Permission**: register and unregister accept `devices:register` or `devices:write`. Listing devices accepts `devices:read` or `devices:write`. `devices:register` deliberately cannot list — see the table below.</Callout>
 
-<Callout kind="warning">Grant `devices:write` (or the `devices:*` wildcard, or full access `*`) when you create the key **via the API**. The dashboard's key editor does not yet show a Devices category, so keys created in the UI cannot get this scope — create the key through the [API keys endpoint](/authentication) instead.</Callout>
+<Callout kind="warning">Grant these scopes when you create the key **via the API**. The dashboard's key editor does not yet show a Devices category, so keys created in the UI cannot get them — create the key through the [API keys endpoint](/authentication) instead. The `devices:*` wildcard and full access `*` also work.</Callout>
+
+| Scope | Register / Unregister | List devices |
+|-------|-----------------------|--------------|
+| `devices:register` | Yes | **No** |
+| `devices:write` | Yes | Yes |
+| `devices:read` | No | Yes |
+
+<Callout kind="tip">Use `devices:register` for keys embedded in a mobile app. It lets the app enrol the device it is running on without being able to enumerate every device token in the workspace — an isolation `devices:write` cannot provide. See the [Flutter guide](/sdks).</Callout>
 
 ## Supported Platforms
 
@@ -529,7 +537,7 @@ FCM tokens can change. Handle token refresh in your app:
 | Invalid token | Token may have expired; request a fresh token from FCM |
 | User not receiving | Check `is_active` and `is_valid` are both `true` |
 | Notification blocked | User may have disabled notifications in device settings |
-| `403 Insufficient permissions` | The API key lacks `devices:write`. Keys created in the dashboard cannot have it yet — create one via the API keys endpoint |
+| `403 Insufficient permissions` | The API key lacks the scope for that route (`devices:register`/`devices:write` to register, `devices:read`/`devices:write` to list). Keys created in the dashboard cannot have any of them yet — create one via the API keys endpoint |
 | `404` on the request itself | You are calling a workspace-scoped path. The API-key route is **not** workspace-scoped; see below |
 
 ### Using the wrong request shape
