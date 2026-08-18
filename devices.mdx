@@ -7,7 +7,9 @@ description: Register and manage device tokens for push notifications
 
 The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
 
-<Callout kind="info">**Required Permission**: device operations are guarded by `devices:write`. There is currently no granular `devices` scope you can grant on its own — use a full-access (`*`) API key, or set a `devices:*` wildcard when creating the key via the API.</Callout>
+<Callout kind="info">**Required Permission**: every device endpoint — including the read-only List Devices — is guarded by `devices:write`. The `devices:read` scope exists but currently grants access to nothing, so do not rely on it.
+
+Grant `devices:write` (or the `devices:*` wildcard, or full access `*`) when you create the key **via the API**. The dashboard's key editor does not yet show a Devices category, so keys created in the UI cannot get this scope — create the key through the [API keys endpoint](/authentication) instead.</Callout>
 
 ## Supported Platforms
 
@@ -32,7 +34,7 @@ A device token in Flameup has the following structure:
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "workspace_id": "ws_abc123",
+  "workspace_id": "866911cd-f4a2-4aff-99b1-3ba383f33c3e",
   "person_id": "550e8400-e29b-41d4-a716-446655440001",
   "device_token": "fMhT8K9x...(FCM token)",
   "platform": "ios",
@@ -49,16 +51,20 @@ A device token in Flameup has the following structure:
 }
 ```
 
-### Field Reference
+### Request Fields
+
+These are the fields you **send** when registering a device. Note that they are not the same as the response fields shown above.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `token` | string | Yes | FCM/APNs token from the device |
+| `token` | string | Yes | FCM/APNs token from the device. Must be 10–4096 characters |
 | `platform` | string | Yes | `ios` or `android` (`web` coming soon) |
 | `device_name` | string | No | Human-readable device name |
 | `device_model` | string | No | Device model identifier |
 | `os_version` | string | No | Operating system version |
 | `app_version` | string | No | Your app's version |
+
+<Callout kind="warning">The token field name differs between request and response. You **send** `token`, but the API **returns** it as `device_token`. Sending `device_token` in a registration request fails with `400` — the field is ignored and the required `token` is then missing.</Callout>
 
 <Callout kind="tip">The `person_id` in the URL path is the Flameup person **UUID** (the `id` returned when you create or identify a person), not your external `userId`. It is passed in the URL path, not in the request body.</Callout>
 
@@ -287,7 +293,7 @@ curl "https://api.flameup.ai/api/v1/people/{person_id}/devices" \
   "devices": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "workspace_id": "ws_abc123",
+      "workspace_id": "866911cd-f4a2-4aff-99b1-3ba383f33c3e",
       "person_id": "550e8400-e29b-41d4-a716-446655440001",
       "device_token": "fMhT8K9x...",
       "platform": "ios",
@@ -522,3 +528,41 @@ FCM tokens can change. Handle token refresh in your app:
 | Invalid token | Token may have expired; request a fresh token from FCM |
 | User not receiving | Check `is_active` and `is_valid` are both `true` |
 | Notification blocked | User may have disabled notifications in device settings |
+| `403 Insufficient permissions` | The API key lacks `devices:write`. Keys created in the dashboard cannot have it yet — create one via the API keys endpoint |
+| `404` on the request itself | You are calling a workspace-scoped path. The API-key route is **not** workspace-scoped; see below |
+
+### Using the wrong request shape
+
+The most common failure is a request built against the older workspace-scoped shape. It returns `404` (no such route) rather than a helpful validation error:
+
+```bash
+# WRONG — this route does not exist for API keys
+curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices" \
+  -H "Authorization: Bearer ws_live_..." \
+  -d '{"person_id": "...", "device_token": "...", "platform": "android"}'
+```
+
+Three things differ from the correct call:
+
+| Wrong | Correct |
+|-------|---------|
+| Workspace in the URL: `/workspaces/{workspace_id}/devices` | No workspace in the URL: `/people/{person_id}/devices`. The workspace is resolved from the API key |
+| `person_id` in the JSON body | `person_id` in the URL path. It is ignored in the body |
+| `device_token` field | `token` field. Required, 10–4096 characters |
+
+```bash
+# CORRECT
+curl -X POST "https://api.flameup.ai/api/v1/people/7266afbc-849a-4724-9670-a07bf1b18980/devices" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ws_live_..." \
+  -d '{
+    "token": "eM_WXDy1SCWh9Op_tY46B3:APA91b...",
+    "platform": "android",
+    "device_name": "Pixel 7",
+    "device_model": "GVU6C",
+    "os_version": "15",
+    "app_version": "2.2.39"
+  }'
+```
+
+<Callout kind="tip">A workspace-scoped device path (`/api/v1/workspaces/{workspace_id}/people/{person_id}/devices`) does exist, but it is authenticated with a dashboard session, not an API key. API-key integrations should always use the workspace-agnostic `/api/v1/people/{person_id}/devices` form shown above.</Callout>
