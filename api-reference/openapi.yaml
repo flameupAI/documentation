@@ -451,7 +451,8 @@ paths:
         This endpoint takes no query parameters and is not paginated. Devices are ordered
         by `last_used_at` (most recent first), then `created_at` descending.
 
-        Guarded by the `devices:write` permission (not `devices:read`).
+        Accepts `devices:read` or `devices:write`. A `devices:register` key is
+        deliberately rejected here — it must not be able to enumerate device tokens.
       operationId: listPersonDevices
       parameters:
         - $ref: '#/components/parameters/PersonUUID'
@@ -475,7 +476,7 @@ paths:
         '400':
           description: Invalid person ID
         '403':
-          description: API key lacks the `devices:write` permission
+          description: API key lacks `devices:read` or `devices:write`
     post:
       tags:
         - Devices
@@ -488,7 +489,8 @@ paths:
         Re-posting the same token updates the existing device record rather than
         creating a duplicate; use this to refresh `app_version` or `os_version`.
 
-        Guarded by the `devices:write` permission.
+        Accepts `devices:register` or `devices:write`. Use `devices:register` for
+        keys embedded in a mobile app.
       operationId: registerDevice
       parameters:
         - $ref: '#/components/parameters/PersonUUID'
@@ -516,7 +518,7 @@ paths:
         '400':
           description: Validation failed, or the person ID is not a valid UUID
         '403':
-          description: API key lacks `devices:write`, or the person belongs to another workspace
+          description: API key lacks `devices:register`/`devices:write`, or the person belongs to another workspace
         '404':
           description: Person not found
         '409':
@@ -534,7 +536,7 @@ paths:
         The device is invalidated rather than hard-deleted, so it stops receiving push
         but remains in the record for auditing.
 
-        Guarded by the `devices:write` permission.
+        Accepts `devices:register` or `devices:write`.
       operationId: unregisterDevice
       parameters:
         - $ref: '#/components/parameters/PersonUUID'
@@ -559,7 +561,7 @@ paths:
         '400':
           description: Invalid person ID
         '403':
-          description: API key lacks the `devices:write` permission
+          description: API key lacks `devices:register` or `devices:write`
         '404':
           description: Device not found
 
