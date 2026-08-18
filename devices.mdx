@@ -7,9 +7,9 @@ description: Register and manage device tokens for push notifications
 
 The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
 
-<Callout kind="info">**Required Permission**: every device endpoint — including the read-only List Devices — is guarded by `devices:write`. The `devices:read` scope exists but currently grants access to nothing, so do not rely on it.
+<Callout kind="info">**Required Permission**: every device endpoint — including the read-only List Devices — is guarded by `devices:write`. The `devices:read` scope exists but currently grants access to nothing, so do not rely on it.</Callout>
 
-Grant `devices:write` (or the `devices:*` wildcard, or full access `*`) when you create the key **via the API**. The dashboard's key editor does not yet show a Devices category, so keys created in the UI cannot get this scope — create the key through the [API keys endpoint](/authentication) instead.</Callout>
+<Callout kind="warning">Grant `devices:write` (or the `devices:*` wildcard, or full access `*`) when you create the key **via the API**. The dashboard's key editor does not yet show a Devices category, so keys created in the UI cannot get this scope — create the key through the [API keys endpoint](/authentication) instead.</Callout>
 
 ## Supported Platforms
 
