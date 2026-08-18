@@ -491,8 +491,9 @@ FCM tokens can change. Handle token refresh in your app:
     Remove the device token when user logs out to prevent notifications going to the wrong person:
 
     ```javascript
-    async function onUserLogout(deviceId) {
-      await flare.unregisterDevice(deviceId);
+    async function onUserLogout(personId, fcmToken) {
+      // Devices are removed by token, not by device ID
+      await flare.unregisterDevice(personId, fcmToken);
       // Clear local FCM token if needed
     }
     ```
