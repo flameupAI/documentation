@@ -223,9 +223,9 @@ If your app uses push notifications, register the device token:
 
 <CodeGroup>
 ```javascript
-async function registerDevice(personId, token, platform) {
+async function registerDevice(externalId, token, platform) {
   const response = await fetch(
-    `https://api.flameup.ai/api/v1/people/${personId}/devices`,
+    `https://api.flameup.ai/api/v1/people/${externalId}/devices`,
     {
       method: 'POST',
       headers: {
@@ -244,7 +244,7 @@ async function registerDevice(personId, token, platform) {
   return response.json();
 }
 
-// Register an iOS device (personId is the Flameup person ID from Step 2)
+// Register an iOS device (externalId is your own user id — no Flameup UUID needed)
 await registerDevice(
   'person_abc123',
   'fcm_device_token_here',
@@ -253,9 +253,9 @@ await registerDevice(
 ```
 
 ```python
-def register_device(person_id, token, platform):
+def register_device(external_id, token, platform):
     response = requests.post(
-        f'https://api.flameup.ai/api/v1/people/{person_id}/devices',
+        f'https://api.flameup.ai/api/v1/people/{external_id}/devices',
         headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {API_KEY}'
@@ -269,7 +269,7 @@ def register_device(person_id, token, platform):
     )
     return response.json()
 
-# Register an iOS device (person_id is the Flameup person ID from Step 2)
+# Register an iOS device (external_id is your own user id — no Flameup UUID needed)
 register_device(
     'person_abc123',
     'fcm_device_token_here',
@@ -284,7 +284,7 @@ Send a push notification to a user (e.g., order confirmation):
 
 <CodeGroup>
 ```javascript
-async function sendPush(personId, title, body, options = {}) {
+async function sendPush(externalId, title, body, options = {}) {
   const response = await fetch(
     `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
     {
@@ -294,7 +294,7 @@ async function sendPush(personId, title, body, options = {}) {
         'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify({
-        person_id: personId,
+        external_id: externalId,
         title: title,
         body: body,
         ...options
@@ -305,7 +305,7 @@ async function sendPush(personId, title, body, options = {}) {
   return response.json();
 }
 
-// Send order confirmation (personId is the Flameup person ID from Step 2)
+// Send order confirmation (externalId is your own user id — the same one you identified with)
 await sendPush('person_abc123',
   'Order Confirmed!',
   'Your order #order_789 is confirmed. Total: $99.99',
@@ -314,7 +314,7 @@ await sendPush('person_abc123',
 ```
 
 ```python
-def send_push(person_id, title, body, **options):
+def send_push(external_id, title, body, **options):
     response = requests.post(
         f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
         headers={
@@ -322,7 +322,7 @@ def send_push(person_id, title, body, **options):
             'Authorization': f'Bearer {API_KEY}'
         },
         json={
-            'person_id': person_id,
+            'external_id': external_id,
             'title': title,
             'body': body,
             **options
@@ -330,7 +330,7 @@ def send_push(person_id, title, body, **options):
     )
     return response.json()
 
-# Send order confirmation (person_id is the Flameup person ID from Step 2)
+# Send order confirmation (external_id is your own user id from Step 2)
 send_push('person_abc123',
     'Order Confirmed!',
     'Your order #order_789 is confirmed. Total: $99.99',
@@ -339,7 +339,7 @@ send_push('person_abc123',
 ```
 </CodeGroup>
 
-<Callout kind="info">The Push API requires the Flameup `person_id` (UUID returned when creating/identifying a user), not your external user ID.</Callout>
+<Callout kind="info">The Push API takes your own user id (`external_id`) — the same one you identified with. It no longer requires the Flameup person UUID, so there is no lookup step.</Callout>
 
 ## Verification
 

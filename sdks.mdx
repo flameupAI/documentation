@@ -100,11 +100,11 @@ class Flameup {
   }
 
   // Push notifications
-  async sendPush(personId, title, body, options = {}) {
+  async sendPush(externalId, title, body, options = {}) {
     return this.request('/push/send', {
       method: 'POST',
       body: JSON.stringify({
-        person_id: personId,
+        external_id: externalId,
         title,
         body,
         ...options
@@ -412,9 +412,7 @@ lifecycleScope.launch {
 
 ### Flutter (Dart)
 
-<Callout kind="warning">There is no published `flameup_flutter` package, and no `sdk/flutter` directory in the Flameup repositories. Do not add a git dependency for one. Flutter integration is a small file you copy into your app and edit, built on plain HTTPS plus `firebase_messaging`.</Callout>
-
-The reference client is `flameup_mobile.dart`, which exposes a single `FlameUpPush` class covering the one thing an app must do: obtain the FCM token, register it against a person, and keep it current when FCM rotates it.
+<Callout kind="warning">There is no published `flameup_flutter` package. Flutter integration is a small file you copy into your app and edit, built on plain HTTPS plus `firebase_messaging`. The API surface below mirrors Firebase Analytics deliberately, so it sits alongside the analytics wrappers most apps already have.</Callout>
 
 **Dependencies:**
 
@@ -428,94 +426,87 @@ dependencies:
 
 Android also needs `android/app/google-services.json` from your Firebase project.
 
-#### Choosing a mode
-
-`FlameUpPush` has two constructors. The difference is whether a Flameup credential ships inside your app bundle.
-
-| Mode | Ships in the app | Backend needed | Trade-off |
-|------|------------------|----------------|-----------|
-| `FlameUpPush.viaRelay` | Nothing | An endpoint of yours that holds the workspace key | No credential in the bundle. Recommended when you already have a backend |
-| `FlameUpPush.direct` | A `devices:register` key + the person UUID | One call at login to hand the app its person UUID | No relay to build. The key can register and unregister devices against UUIDs it already knows, and nothing else |
-
-<Callout kind="warning">If you use `direct`, scope the key to `devices:register` **only**. Adding `events:write` turns it into a person-read oracle: `POST /identify` returns an existing person's full stored record, so a key extracted from an APK can be looped over user ids to read your person table.</Callout>
-
-#### Relay mode
-
-The app never holds a Flameup key. It posts the token to your own backend, which resolves the person UUID from the session and forwards to Flameup.
+#### Setup
 
 ```dart
-final push = FlameUpPush.viaRelay(
-  deviceRegistrationEndpoint: Uri.parse('https://api.yourapp.com/push/device'),
-  sessionToken: () => auth.accessToken,
-  deviceMetadata: {'app_version': '2.2.39', 'os_version': '15'},
-);
-
-await push.start();
+await FlameUp.initialize(FlameUpOptions(
+  publicKey: const String.fromEnvironment('FLAMEUP_PUBLIC_KEY'),
+  trackedEvents: {'login_successful', 'start_quiz', 'sales_page_viewed'},
+  eventNamePrefix: 'tl_',
+  enabled: true,
+));
 ```
 
-Your backend handler then registers with the workspace key:
+| Option | Type | Default | Purpose |
+|--------|------|---------|---------|
+| `publicKey` | `String` | required | Your public ingest key |
+| `baseUrl` | `String` | `https://api.flameup.ai/api/v1` | Override for staging |
+| `trackedEvents` | `Set<String>` | `{}` | Allowlist. Empty sends nothing |
+| `trackedScreens` | `Set<String>` | `{}` | Same rule for screen views |
+| `eventNamePrefix` | `String?` | `null` | Stripped before send |
+| `enabled` | `bool` | `true` | Kill switch, no rebuild needed |
+| `timeout` | `Duration` | `10s` | Per request |
 
-```
-person = identify(currentUser.id)        // -> person.id (the Flameup UUID)
-registerDevice(person.id, {token, platform})
-```
+<Callout kind="tip">`trackedEvents` is an allowlist, not a filter you can skip. Most apps define hundreds of analytics events, every Flameup event re-evaluates that person's journeys server-side, and your workspace ingest budget is shared across everything. Add a name only once a campaign branches on it.</Callout>
 
-#### Direct mode
+#### Methods
 
 ```dart
-// personId comes from your own backend at login — cache it with the session.
-final push = FlameUpPush.direct(
-  apiKey: const String.fromEnvironment('FLAMEUP_DEVICE_KEY'),
-  personId: () => session.flameupPersonId,
-  deviceMetadata: {'app_version': '2.2.39', 'device_model': 'Pixel 7'},
-);
-
-await push.start();
-
-// On logout, so the device stops receiving that user's pushes:
-await push.unregister(await FirebaseMessaging.instance.getToken() ?? '');
+FlameUp.instance.setUser('user_12345');
+FlameUp.instance.logEvent(name: 'start_quiz', parameters: {'exam': 'RPSC'});
+FlameUp.instance.logScreenView(name: 'sales_page');
+FlameUp.instance.setPushToken(token);
+FlameUp.instance.logoutUser();
 ```
 
-<Callout kind="tip">`personId` is a callback, not a value, so it is resolved per request. When one user logs out and another logs in, registration follows the person actually signed in — no need to rebuild the client.</Callout>
+| Method | Calls | Scope needed |
+|--------|-------|--------------|
+| `setUser(String userId)` | registers this device | `devices:register` |
+| `logEvent(name:, parameters:)` | `POST /track` | `events:write` |
+| `logScreenView(name:, parameters:)` | `POST /track` | `events:write` |
+| `setPushToken(String token)` | `POST /people/{external_id}/devices` | `devices:register` |
+| `logoutUser()` | `DELETE /people/{external_id}/devices/{token}` | `devices:register` |
 
-`unregister()` is direct-mode only. In relay mode it throws, because the app has no key; route logout through your backend, which calls `DELETE /api/v1/people/{personId}/devices/{token}`.
+`parameters` is the wire field name — `properties` is accepted as an alias but `parameters` is canonical.
 
-#### What `start()` does
+#### Identity
 
-`start()` requests notification permission, obtains the FCM token, registers it, and subscribes to `onTokenRefresh` so rotated tokens re-register automatically.
+`setUser` takes **your own user id** — the same value you send to `/identify` and `/track`. There is no Flameup UUID to fetch, cache, or pass around.
 
-<Callout kind="warning">Wire `onTokenRefresh`, not just `getToken()`. FCM rotates device tokens, and a stale token drops every push silently — with no error anywhere in your logs. Calling `start()` handles this for you.</Callout>
+It also registers the current FCM token against that user, so a normal app never touches a token directly. `setPushToken` exists for the refresh case.
+
+<Callout kind="warning">Wire `onTokenRefresh`, not just `getToken()`. FCM rotates device tokens, and a stale token drops every push silently — with no error anywhere in your logs.</Callout>
+
+`logoutUser()` unregisters this device **before** clearing local state. Skip it and the next person to use that handset keeps receiving the previous user's notifications.
+
+#### Traits come from your backend
+
+A public key cannot call `/identify` — that route requires `people:write`, which a client-embedded key must never hold. Send traits from your server, where the key can be scoped for it.
+
+This is deliberate: journeys branch on traits, so a client that could write them could reroute any user it could name.
 
 #### Required scope
 
-Device registration needs `devices:register` or `devices:write`:
-
-| Scope | POST / DELETE a device | GET (list) devices |
-|-------|------------------------|--------------------|
+| Scope | Register / unregister | List devices |
+|-------|----------------------|--------------|
 | `devices:register` | Yes | **No** — deliberately excluded |
 | `devices:write` | Yes | Yes |
 | `devices:read` | No | Yes |
 
-`devices:register` exists precisely so an app can enrol the device it is running on without being able to enumerate every device token in the workspace. Use it for `direct` mode, never `devices:write`.
-
-<Callout kind="info">The dashboard's key editor does not offer a Devices category yet, so these scopes can only be granted when creating a key through the API. See [Authentication](/authentication).</Callout>
+`devices:register` exists so an app can enrol its own device without being able to enumerate every device token in the workspace. Use it in a shipped app, never `devices:write`.
 
 #### Errors worth handling
 
-`FlameUpPushError` carries the HTTP status. The ones that mean something specific:
-
 | Status | Meaning |
 |--------|---------|
-| `400` | Malformed person UUID or body. `personId` must be the Flameup UUID, not your own user id |
-| `401` / `403` | Key rejected, the key lacks `devices:register`, or the person belongs to another workspace |
-| `404` | Person not found — identify the user before registering |
-| `409` | Person is inactive; reactivate before registering a device |
+| `400` | Malformed body. Check `token` (10–4096 chars) and `platform` |
+| `401` / `403` | Key rejected, or it lacks the scope for that route |
+| `409` | Person is inactive |
+| `429` | Rate limited — back off and retry |
 
-<Callout kind="warning">The most common integration bug: `personId` is Flameup's person **UUID**, not your external user id. Take it from `person.id` in the identify response and store it alongside your user record. Passing your own user id returns `400`, because the handler parses the path segment as a UUID.</Callout>
+<Callout kind="tip">Push delivery also requires your workspace's FCM credentials in the dashboard (Settings → Messaging Channels → Push). Until that is done, registration and journeys work normally and simply stop at the delivery step.</Callout>
 
-`platform` is derived automatically and is always exactly `ios`, `android`, or `web` — the API rejects anything else with `400`. The client checks `kIsWeb` before `defaultTargetPlatform`, since the latter reports the host OS on web builds and would otherwise register a browser on a Mac as `ios`.
-
-<Callout kind="tip">Push delivery also requires your workspace's FCM credentials to be uploaded in the dashboard (Settings → Messaging Channels → Push). Until that is done, registration and journeys work normally and simply stop at the delivery step.</Callout>
+`platform` must be exactly `ios`, `android`, or `web`. Check `kIsWeb` before `defaultTargetPlatform` — the latter reports the host OS on web builds and would register a browser on a Mac as `ios`.
 
 ## cURL Examples
 
