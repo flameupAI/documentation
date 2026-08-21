@@ -9,6 +9,34 @@ Stay up to date with the latest changes to Flameup.
 
 ---
 
+<Update label="2026-08-21" description="Device and push routes key on your own user id" tags={["breaking", "api"]}>
+## Breaking: `external_id` replaces the person UUID
+
+Two API-key surfaces changed the identifier they accept, so that every API-key
+route now takes the identifier **you** assign rather than mixing it with
+Flameup's internal person UUID.
+
+| Endpoint | Was | Now |
+|---|---|---|
+| `POST` / `DELETE` / `GET` `/people/{id}/devices` | `{id}` was the person UUID | `{id}` is your `external_id` |
+| `POST /push/send` | body took `person_id` | body takes `external_id`, required |
+
+**Why:** the mismatch was not cosmetic. An app registered a push token against a
+UUID while its events arrived keyed by `external_id`, so the token attached to a
+different person record than campaigns resolved — and the push silently went
+nowhere.
+
+**What to change:** stop resolving a person UUID before these calls and pass the
+same user id you already send to `/identify` and `/track`. There is no lookup
+step to keep.
+
+The Firebase-authenticated dashboard routes
+(`/workspaces/{workspace_id}/people/{personId}/...`) are unchanged and still take
+UUIDs, which is correct there — they read them from their own list views.
+</Update>
+
+---
+
 <Update label="2024-12-07" description="v1.0.0 - General Availability" tags={["release", "feature"]}>
 ## Flameup API v1.0.0 - General Availability
 

@@ -439,7 +439,7 @@ paths:
                   event_id:
                     type: string
 
-  /people/{personId}/devices:
+  /people/{externalId}/devices:
     get:
       tags:
         - Devices
@@ -455,7 +455,7 @@ paths:
         deliberately rejected here — it must not be able to enumerate device tokens.
       operationId: listPersonDevices
       parameters:
-        - $ref: '#/components/parameters/PersonUUID'
+        - $ref: '#/components/parameters/PersonExternalId'
       responses:
         '200':
           description: Device list
@@ -493,7 +493,7 @@ paths:
         keys embedded in a mobile app.
       operationId: registerDevice
       parameters:
-        - $ref: '#/components/parameters/PersonUUID'
+        - $ref: '#/components/parameters/PersonExternalId'
       requestBody:
         required: true
         content:
@@ -524,7 +524,7 @@ paths:
         '409':
           description: Cannot register a device for an inactive person
 
-  /people/{personId}/devices/{token}:
+  /people/{externalId}/devices/{token}:
     delete:
       tags:
         - Devices
@@ -539,7 +539,7 @@ paths:
         Accepts `devices:register` or `devices:write`.
       operationId: unregisterDevice
       parameters:
-        - $ref: '#/components/parameters/PersonUUID'
+        - $ref: '#/components/parameters/PersonExternalId'
         - name: token
           in: path
           required: true
@@ -778,16 +778,17 @@ components:
       schema:
         type: string
         format: uuid
-    PersonUUID:
-      name: personId
+    PersonExternalId:
+      name: externalId
       in: path
       required: true
       description: >-
-        The Flameup person UUID — the `id` returned when creating or upserting a person.
-        This is NOT your external `userId`.
+        Your own user id — the same `userId` you send to /identify and /track.
+        This is NOT the Flameup person UUID. Every API-key route keys on this
+        identifier; the Flameup UUID is used only by the dashboard's
+        workspace-scoped routes.
       schema:
         type: string
-        format: uuid
     CampaignId:
       name: campaignId
       in: path
@@ -1074,7 +1075,9 @@ components:
       properties:
         user_id:
           type: string
-          description: User's external_id or Flameup person_id
+          description: >-
+            Your own user id (external_id). The Flameup person UUID is no longer
+            accepted on the API-key push surface.
         template_id:
           type: string
           description: ID of a pre-defined template
