@@ -431,7 +431,6 @@ Android also needs `android/app/google-services.json` from your Firebase project
 ```dart
 await FlameUp.initialize(FlameUpOptions(
   publicKey: const String.fromEnvironment('FLAMEUP_PUBLIC_KEY'),
-  trackedEvents: {'login_successful', 'start_quiz', 'sales_page_viewed'},
   eventNamePrefix: 'tl_',
   enabled: true,
 ));
@@ -441,13 +440,9 @@ await FlameUp.initialize(FlameUpOptions(
 |--------|------|---------|---------|
 | `publicKey` | `String` | required | Your public ingest key |
 | `baseUrl` | `String` | `https://api.flameup.ai/api/v1` | Override for staging |
-| `trackedEvents` | `Set<String>` | `{}` | Allowlist. Empty sends nothing |
-| `trackedScreens` | `Set<String>` | `{}` | Same rule for screen views |
 | `eventNamePrefix` | `String?` | `null` | Stripped before send |
 | `enabled` | `bool` | `true` | Kill switch, no rebuild needed |
 | `timeout` | `Duration` | `10s` | Per request |
-
-<Callout kind="tip">`trackedEvents` is an allowlist, not a filter you can skip. Most apps define hundreds of analytics events, every Flameup event re-evaluates that person's journeys server-side, and your workspace ingest budget is shared across everything. Add a name only once a campaign branches on it.</Callout>
 
 #### Methods
 
@@ -474,6 +469,8 @@ FlameUp.instance.logoutUser();
 `setUser` takes **your own user id** — the same value you send to `/identify` and `/track`. There is no Flameup UUID to fetch, cache, or pass around.
 
 It also registers the current FCM token against that user, so a normal app never touches a token directly. `setPushToken` exists for the refresh case.
+
+<Callout kind="info">There is no client-side event filter. Send everything, the same as any other analytics SDK — campaigns are authored in the Flameup dashboard, and triggers match the event name exactly, so an event only starts a journey when a campaign names it precisely. Deciding what matters is a dashboard change, not an app release.</Callout>
 
 <Callout kind="warning">Wire `onTokenRefresh`, not just `getToken()`. FCM rotates device tokens, and a stale token drops every push silently — with no error anywhere in your logs.</Callout>
 
