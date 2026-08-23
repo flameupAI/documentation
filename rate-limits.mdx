@@ -82,13 +82,15 @@ advance. React to the rejection instead:
 
 <CodeGroup>
 ```javascript
+const MAX_RETRIES = 5; // retries after the first attempt, so 6 requests at worst
+
 async function request(url, options = {}, attempt = 0) {
   const response = await fetch(url, {
     ...options,
     headers: { Authorization: `Bearer ${API_KEY}`, ...options.headers }
   });
 
-  if (response.status === 429 && attempt < 5) {
+  if (response.status === 429 && attempt < MAX_RETRIES) {
     // Retry-After is in seconds and is the header to trust.
     const retryAfter = parseInt(response.headers.get('Retry-After') || '0');
     const wait = (retryAfter || 2 ** attempt) * 1000;
@@ -103,11 +105,13 @@ async function request(url, options = {}, attempt = 0) {
 ```python
 import time, requests
 
+MAX_RETRIES = 5  # retries after the first attempt, so 6 requests at worst
+
 def request(method, url, attempt=0, **kwargs):
     headers = {'Authorization': f'Bearer {API_KEY}', **kwargs.get('headers', {})}
     r = requests.request(method, url, **{**kwargs, 'headers': headers})
 
-    if r.status_code == 429 and attempt < 5:
+    if r.status_code == 429 and attempt < MAX_RETRIES:
         retry_after = int(r.headers.get('Retry-After', 0))
         time.sleep(retry_after or 2 ** attempt)
         return request(method, url, attempt + 1, **kwargs)

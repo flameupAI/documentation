@@ -472,14 +472,17 @@ paths:
                   success:
                     type: boolean
                   person:
-                    oneOf:
+                    anyOf:
                       - $ref: '#/components/schemas/IdentifiedPerson'
                       - $ref: '#/components/schemas/Person'
                     description: >-
                       `IdentifiedPerson` for a key without `people:read` — the
                       common case for a `pk_live_` key. The full `Person` for a
                       key that holds `people:read` and could have read the
-                      record anyway.
+                      record anyway. `anyOf` rather than `oneOf` because the
+                      trimmed shape is a subset of the full one and validates
+                      against both; the permission decides which you get, and
+                      that is not expressible in the schema.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1236,7 +1239,7 @@ components:
           type: string
         platform:
           type: string
-          description: Device platform (web coming soon)
+          description: Device platform
           enum: [ios, android, web]
         device_name:
           type: string
@@ -1280,7 +1283,7 @@ components:
             so `person_id` and `workspace_id` are not accepted here.
         platform:
           type: string
-          description: Device platform (web coming soon)
+          description: Device platform
           enum: [ios, android, web]
         device_name:
           type: string

@@ -5,7 +5,7 @@ description: Register and manage device tokens for push notifications
 
 ## Overview
 
-The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push support is coming soon.
+The Devices API allows you to register and manage device tokens for push notifications. When users install your mobile app, you register their device token with Flameup to enable push messaging. Web push is supported alongside iOS and Android.
 
 <Callout kind="info">**Required Permission**: register and unregister accept `devices:register` or `devices:write`. Listing devices accepts `devices:read` or `devices:write`. `devices:register` deliberately cannot list — see the table below.</Callout>
 
@@ -30,8 +30,8 @@ Flameup supports push notifications on three platforms:
   <Card title="Android" icon="smartphone">
     Firebase Cloud Messaging (FCM) for Android devices
   </Card>
-  <Card title="Web (Coming Soon)" icon="globe">
-    Web Push API via Firebase Cloud Messaging - Coming Soon...
+  <Card title="Web" icon="globe">
+    Web Push API via Firebase Cloud Messaging
   </Card>
 </Columns>
 
@@ -66,7 +66,7 @@ These are the fields you **send** when registering a device. Note that they are 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `token` | string | Yes | FCM/APNs token from the device. Must be 10–4096 characters |
-| `platform` | string | Yes | `ios` or `android` (`web` coming soon) |
+| `platform` | string | Yes | `ios`, `android` or `web` |
 | `device_name` | string | No | Human-readable device name |
 | `device_model` | string | No | Device model identifier |
 | `os_version` | string | No | Operating system version |
@@ -162,8 +162,7 @@ Register a device token to enable push notifications for a user.
     }
     ```
   </Tab>
-  <Tab title="Web Push (Coming Soon)" icon="globe">
-    <Callout kind="info">Web Push support is coming soon. The code below shows the planned implementation.</Callout>
+  <Tab title="Web Push" icon="globe">
 
     ```javascript
     // After obtaining FCM token in your web app
@@ -464,8 +463,7 @@ FCM tokens can change. Handle token refresh in your app:
     }
     ```
   </Tab>
-  <Tab title="Web (Coming Soon)" icon="globe">
-    <Callout kind="info">Web Push support is coming soon.</Callout>
+  <Tab title="Web" icon="globe">
 
     ```javascript
     import { onMessage, getToken } from 'firebase/messaging';

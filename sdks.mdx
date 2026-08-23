@@ -352,9 +352,10 @@ where `people:write` would also open the rest of the People API.
 
 **Be clear about what it does not do.** `people:identify` gates the route; it
 does not restrict *which* person you may write or *which* trait keys you may
-set. The request names the person by `external_id`, so a key that ships inside
-your app can write any trait on any person whose identifier someone can guess or
-read out of your own API responses. Nothing in the request proves the install
+set. The request names the person by `userId` (with `external_id` and `user_id`
+accepted as aliases), so a key that ships inside your app can write any trait on
+any person whose identifier someone can guess or read out of your own API
+responses. Nothing in the request proves the install
 belongs to that person.
 
 That is why backend-owned traits — plan, entitlements, lifetime value — should
