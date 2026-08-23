@@ -18,7 +18,7 @@ Flameup API keys follow this format:
 ```
 
 Where:
-- **Prefix**: `ws_live_{workspace_short}_{random}` (e.g., `ws_live_abc12345_abc123`)
+- **Prefix**: `{type}_{env}_{workspace_short}_{random}` (e.g., `ws_live_abc12345_abc123`)
 - **Secret**: 64 hexadecimal characters
 
 Full example:
@@ -26,7 +26,24 @@ Full example:
 ws_live_abc12345_abc123.a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
 ```
 
-The prefix includes a shortened workspace ID for identification.
+The prefix includes a shortened workspace ID for identification. Only the
+prefix is stored in readable form — the secret is stored as a hash, which is
+why a key cannot be retrieved after creation.
+
+### Two kinds of key
+
+The prefix tells you where a key is allowed to live.
+
+| Prefix | Where it belongs | What it can hold |
+|---|---|---|
+| `ws_live_` / `ws_test_` | **Your server only.** Backends, scripts, integrations | Any permission, including `*` |
+| `pk_live_` / `pk_test_` | **Inside your app or website.** Shipped to users' devices | `events:write`, `devices:register`, `people:identify` — and nothing else |
+
+A public key is restricted by the server, not by convention: a permission
+outside that list is rejected when the key is created **and** when it is
+updated, so one cannot be widened later.
+
+<Callout kind="warning">Never ship a `ws_` key in a mobile app or a web page. It can read your entire person table, send messages to anyone, and create further keys. The `pk_` prefix exists so a secret scanner can tell the two apart — allowlist `pk_`, alert on `ws_`.</Callout>
 
 ## Authentication Methods
 
@@ -73,12 +90,19 @@ API keys have granular permissions that control access to different resources:
 | Category | Permissions | Description |
 |----------|-------------|-------------|
 | **Events** | `events:read`, `events:write`, `events:list` | Read and track user events |
-| **People** | `people:read`, `people:write`, `people:delete`, `people:list` | Manage user profiles |
+| **People** | `people:read`, `people:write`, `people:identify`, `people:delete`, `people:list` | Manage user profiles. `people:identify` is the narrow, app-safe one — see below |
 | **Campaigns** | `campaigns:read`, `campaigns:write`, `campaigns:trigger` | Manage and trigger campaigns |
 | **Analytics** | `analytics:read` | Access reporting data |
 | **Workspace** | `workspace:read`, `workspace:write` | Workspace settings |
-| **Devices** | `devices:register`, `devices:read`, `devices:write` | `devices:register` registers/unregisters only (safe to embed in a mobile app); `devices:read` lists only; `devices:write` does both. Grantable only when creating a key via the API — the dashboard editor has no Devices category yet |
+| **Devices** | `devices:register`, `devices:read`, `devices:write` | `devices:register` registers and unregisters only, and is safe to embed in an app; `devices:read` lists only; `devices:write` does both |
+| **Push** | `push:send`, `push:read` | Send push, and read delivery status and analytics. Never grantable on a public key: sending renders a template against the recipient's stored record |
 | **Full Access** | `*` | Wildcard granting access to all resources |
+
+`people:identify` deserves its own note. It authorizes `POST /identify` and
+nothing else — creating or updating one person's traits by an identifier you
+already know. It is deliberately narrower than `people:write`, which also
+carries `/people` CRUD and a 1000-operation batch route, and it is the only
+`people:` permission a public key may hold.
 
 ### Common Permission Sets
 
@@ -143,10 +167,16 @@ API keys have granular permissions that control access to different resources:
   <Step title="Open Dashboard" icon="layout">
     Log in to your [Flameup Dashboard](https://app.flameup.ai) and navigate to Settings > API Keys.
   </Step>
-  <Step title="Create New Key" icon="plus">
-    Click "Create API Key" and provide:
-    - **Name**: A descriptive name (e.g., "Backend Server", "Mobile App")
-    - **Permissions**: Select the required permissions
+  <Step title="Say where the key will be used" icon="server">
+    **On my server** — you pick the permissions.
+
+    **In my app or website** — there are no permissions to pick. Flameup applies
+    the public-key set for you, because there is exactly one combination that is
+    safe to ship and choosing it by hand is a chance to get it wrong.
+  </Step>
+  <Step title="Name it" icon="plus">
+    A descriptive name (e.g. "Backend Server", "Android app"). This is what you
+    will see in the list later when deciding whether a key can be revoked.
   </Step>
   <Step title="Copy Your Key" icon="copy">
     Copy the full API key immediately. For security, the full key is only shown once.
@@ -154,6 +184,69 @@ API keys have granular permissions that control access to different resources:
 </Steps>
 
 <Callout kind="warning">The full API key is only displayed once when created. Store it securely - you cannot retrieve it later.</Callout>
+
+## Creating API Keys via the API
+
+Key creation is authenticated with a **dashboard session token**, not with an
+API key — a key cannot mint another key. Use this when provisioning
+programmatically.
+
+**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/api-keys`
+
+<CodeGroup>
+```bash Server key
+curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" \
+  -H "Authorization: Bearer {dashboard_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Backend Server",
+    "permissions": ["events:write", "people:write", "people:read"],
+    "environment": "live"
+  }'
+```
+
+```bash App key
+curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" \
+  -H "Authorization: Bearer {dashboard_token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Android app",
+    "key_type": "public",
+    "permissions": ["events:write", "devices:register", "people:identify"],
+    "environment": "live"
+  }'
+```
+</CodeGroup>
+
+| Field | Required | Notes |
+|---|---|---|
+| `name` | yes | Shown in the dashboard list |
+| `permissions` | yes | See [Permissions](#permissions). Validated against `key_type` |
+| `key_type` | no | `secret` (default) or `public` |
+| `environment` | no | `live` (default) or `test` |
+| `expires_at` | no | ISO 8601. Must be in the future |
+| `ip_whitelist` | no | Array of IPs or CIDR ranges |
+
+**Response (`201`):**
+
+```json
+{
+  "success": true,
+  "api_key": {
+    "id": "8f2a...",
+    "key_prefix": "pk_live_abc12345_abc123",
+    "key": "pk_live_abc12345_abc123.a1b2c3...",
+    "permissions": ["events:write", "devices:register", "people:identify"],
+    "key_type": "public"
+  },
+  "warning": "This is the only time the full API key will be shown. Please save it securely."
+}
+```
+
+`key` is the value you authenticate with, and it appears in this response and
+nowhere else. `key_prefix` is safe to log and to display later.
+
+<Callout kind="info">Asking for a permission that a public key may not hold returns `400` with the allowed list in the message, before any key is created — so a rejected request never leaves a half-made key behind.</Callout>
 
 ## Security Features
 
