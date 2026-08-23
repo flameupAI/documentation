@@ -51,8 +51,8 @@ paths:
           description: Number of results (max 100)
           schema:
             type: integer
-            default: 20
-            maximum: 100
+            default: 50
+            maximum: 500
         - name: offset
           in: query
           description: Pagination offset
@@ -216,7 +216,9 @@ paths:
       tags:
         - People
       summary: Batch upsert people
-      description: Create or update multiple people (max 100).
+      description: >-
+        Create or update multiple people in one request. The `identify` array
+        holds up to 1000 operations.
       operationId: batchUpsertPeople
       requestBody:
         required: true
@@ -225,11 +227,11 @@ paths:
             schema:
               type: object
               required:
-                - people
+                - identify
               properties:
-                people:
+                identify:
                   type: array
-                  maxItems: 100
+                  maxItems: 1000
                   items:
                     $ref: '#/components/schemas/CreatePersonRequest'
       responses:
@@ -240,13 +242,11 @@ paths:
               schema:
                 type: object
                 properties:
-                  people:
+                  results:
                     type: array
                     items:
                       $ref: '#/components/schemas/Person'
-                  created_count:
-                    type: integer
-                  updated_count:
+                  total:
                     type: integer
 
   /people/search:
@@ -301,6 +301,8 @@ paths:
       summary: Get people statistics
       description: Get aggregate statistics for people in the workspace.
       operationId: getPeopleStats
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
       responses:
@@ -333,6 +335,8 @@ paths:
       summary: Get person events
       description: Retrieve events for a specific person.
       operationId: getPersonEvents
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/PersonId'
@@ -354,65 +358,6 @@ paths:
                     items:
                       $ref: '#/components/schemas/Event'
 
-  /workspaces/{workspaceId}/events:
-    description: >-
-      Dashboard-only endpoint. It is authenticated with a Firebase dashboard
-      session, not an API key — calling it with an API key fails. There is no
-      API-key equivalent for this route.
-    get:
-      tags:
-        - Events
-      summary: List events
-      description: Retrieve events in the workspace.
-      operationId: listEvents
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 50
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            default: 0
-        - name: user_id
-          in: query
-          description: Filter by user ID
-          schema:
-            type: string
-        - name: event
-          in: query
-          description: Filter by event name
-          schema:
-            type: string
-        - name: since
-          in: query
-          description: Events after this time (ISO 8601)
-          schema:
-            type: string
-            format: date-time
-        - name: until
-          in: query
-          description: Events before this time (ISO 8601)
-          schema:
-            type: string
-            format: date-time
-      responses:
-        '200':
-          description: Event list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  events:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Event'
-                  total:
-                    type: integer
   /track:
     post:
       tags:
@@ -427,8 +372,8 @@ paths:
             schema:
               $ref: '#/components/schemas/TrackEventRequest'
       responses:
-        '200':
-          description: Event tracked
+        '201':
+          description: Event accepted and processed
           content:
             application/json:
               schema:
@@ -436,8 +381,230 @@ paths:
                 properties:
                   success:
                     type: boolean
-                  event_id:
+                  data:
+                    type: object
+                    properties:
+                      event_id:
+                        type: string
+                      person_id:
+                        type: string
+                        format: uuid
+                      event:
+                        type: string
+                      parameters:
+                        type: object
+                        additionalProperties: true
+                      timestamp:
+                        type: string
+                        format: date-time
+                      processed_at:
+                        type: string
+                        format: date-time
+                      status:
+                        type: string
+                        enum: [processed, accepted_with_warnings]
+                      person_created:
+                        type: boolean
+                        description: >-
+                          Present and true only when this call created the
+                          person. Its absence means the identifier was already
+                          known — so seeing it on an id you believed
+                          established points at a typo, not a new user.
+                      warnings:
+                        type: array
+                        items:
+                          type: string
+
+  /identify:
+    post:
+      tags:
+        - People
+      summary: Identify a person
+      description: >-
+        Create or update one person and their traits, keyed on your own user id.
+        This is the primary ingestion route for a people-first integration.
+
+
+        Requires `people:write` or the narrower `people:identify`. The latter
+        authorizes this route and nothing else, which is what makes it safe on a
+        key shipped inside an app.
+      operationId: identifyPerson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentifyRequest'
+      responses:
+        '200':
+          description: >-
+            Person created or updated. The `person` object is trimmed to
+            `id`, `workspace_id` and `userId` for any key without
+            `people:read`, so identify cannot be used to read a person back.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  person:
+                    $ref: '#/components/schemas/Person'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /track/batch:
+    post:
+      tags:
+        - Events
+      summary: Track events in batch
+      description: Record up to 100 events in one request.
+      operationId: trackEventsBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    $ref: '#/components/schemas/TrackEventRequest'
+      responses:
+        '201':
+          description: All events accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  processed:
+                    type: integer
+                  total:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+        '207':
+          description: >-
+            Partial success. Some events were accepted and some were not;
+            `errors[].index` points back at the position in the request array,
+            so only those need resending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  processed:
+                    type: integer
+                  total:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                        error:
+                          type: string
+
+  /events/search:
+    get:
+      tags:
+        - Events
+      summary: Search events by type
+      description: Return recent events of one type across the workspace.
+      operationId: searchEvents
+      parameters:
+        - name: event
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The event name to search for.
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Only return events at or after this time (RFC 3339).
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Matching events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
+
+  /people/{id}/events:
+    get:
+      tags:
+        - Events
+      summary: Get a person's events
+      description: >-
+        Recent events for one person, newest first. Requires `events:read`.
+      operationId: getPersonEventsByExternalId
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Your own user id, not the Flameup person UUID.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+      responses:
+        '200':
+          description: The person's events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  person_id:
                     type: string
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
 
   /people/{externalId}/devices:
     get:
@@ -516,7 +683,7 @@ paths:
                   message:
                     type: string
         '400':
-          description: Validation failed, or the person ID is not a valid UUID
+          description: Validation failed — check `token` length and `platform`
         '403':
           description: API key lacks `devices:register`/`devices:write`, or the person belongs to another workspace
         '404':
@@ -576,6 +743,8 @@ paths:
       summary: List campaigns
       description: Retrieve campaigns in the workspace.
       operationId: listCampaigns
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - name: status
@@ -608,6 +777,8 @@ paths:
       summary: Create campaign
       description: Create a new campaign.
       operationId: createCampaign
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
       requestBody:
@@ -634,6 +805,8 @@ paths:
         - Campaigns
       summary: Get campaign
       operationId: getCampaign
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/CampaignId'
@@ -649,6 +822,8 @@ paths:
         - Campaigns
       summary: Update campaign
       operationId: updateCampaign
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/CampaignId'
@@ -665,6 +840,8 @@ paths:
         - Campaigns
       summary: Delete campaign
       operationId: deleteCampaign
+      security:
+        - DashboardAuth: []
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
         - $ref: '#/components/parameters/CampaignId'
@@ -874,6 +1051,32 @@ components:
               type: string
           additionalProperties: true
 
+    IdentifyRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: >-
+            Your own user id. `external_id` and `user_id` are accepted aliases.
+            Send only one — if two are present and disagree the request is
+            rejected rather than one being picked for you.
+        external_id:
+          type: string
+        user_id:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        traits:
+          type: object
+          additionalProperties: true
+          description: Merged with existing traits; new values win.
+        timestamp:
+          type: string
+          format: date-time
+
     UpdatePersonRequest:
       type: object
       properties:
@@ -1070,34 +1273,52 @@ components:
 
     TransactionalRequest:
       type: object
-      required:
-        - user_id
+      required: [external_id, title, body]
       properties:
-        user_id:
+        external_id:
           type: string
           description: >-
-            Your own user id (external_id). The Flameup person UUID is no longer
-            accepted on the API-key push surface.
-        template_id:
+            Your own user id — the same one you send to /identify and /track.
+            The Flameup person UUID is not accepted.
+        title:
           type: string
-          description: ID of a pre-defined template
-        template:
-          type: object
-          description: Inline template (if no template_id)
-          properties:
-            title:
-              type: string
-            body:
-              type: string
-            data:
-              type: object
-        data:
-          type: object
-          description: Variables for template personalization
+        body:
+          type: string
         platform:
           type: string
           enum: [ios, android, web, all]
-          description: Target platform (defaults to all; web coming soon)
+          default: all
+        image_url:
+          type: string
+        action_url:
+          type: string
+        priority:
+          type: string
+          enum: [low, normal, high]
+        ttl:
+          type: integer
+          description: Seconds.
+        custom_data:
+          type: object
+          additionalProperties: true
+        ios_badge:
+          type: integer
+        ios_sound:
+          type: string
+        ios_category:
+          type: string
+        android_icon:
+          type: string
+          description: >-
+            A drawable name in YOUR app. Omit it and Android uses the app's own
+            default notification icon, which is almost always what you want.
+        android_channel_id:
+          type: string
+          description: A notification channel in your app. Omit to use its default.
+        android_color:
+          type: string
+        android_sound:
+          type: string
 
     Error:
       type: object
