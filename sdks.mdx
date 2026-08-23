@@ -346,15 +346,26 @@ It also registers the current FCM token against that user, so a normal app never
 
 #### Traits
 
-A public key *can* call `/identify`, but only if it holds `people:identify` —
-a narrow scope that authorizes that one route and nothing else. It exists so an
-app can set the traits it is the source of (locale, app version, notification
-opt-in) without holding `people:write`, which would let it rewrite any person in
-the workspace.
+A public key *can* call `/identify`, if it holds `people:identify`. That scope
+is narrow in one sense only: it authorizes this one route and nothing else,
+where `people:write` would also open the rest of the People API.
 
-Send traits your backend owns — plan, entitlements, lifetime value — from your
-backend. Those are the ones journeys branch on, and a client that could write
-them could reroute any user it could name.
+**Be clear about what it does not do.** `people:identify` gates the route; it
+does not restrict *which* person you may write or *which* trait keys you may
+set. The request names the person by `external_id`, so a key that ships inside
+your app can write any trait on any person whose identifier someone can guess or
+read out of your own API responses. Nothing in the request proves the install
+belongs to that person.
+
+That is why backend-owned traits — plan, entitlements, lifetime value — should
+still be written by your backend with a secret key. Not because the public key
+is forbidden from writing them, but because anything your app can send, someone
+holding your extracted key can also send. Journeys branch on those traits, so a
+forged write reroutes a real user's messages.
+
+Keep client-sent traits to the ones the device is genuinely the source of and
+that carry no routing weight on their own: locale, app version, notification
+permission.
 
 #### Required scope
 

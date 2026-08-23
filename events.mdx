@@ -7,7 +7,7 @@ description: Track user behavior and actions with the Flameup Events API
 
 The Events API allows you to track user actions and behaviors in your application. Events power analytics, trigger campaigns, and help you understand how users interact with your product.
 
-<Callout kind="info">**Permissions**: writes (`/track`, `/track/batch`) need `events:write`; reads (`/people/{id}/events`, `/events/search`) need `events:read`. `/identify` is a people write — see that section.</Callout>
+<Callout kind="info">**Permissions**: writes (`/track`, `/track/batch`) need `events:write`; reads (`/people/{external_id}/events`, `/events/search`) need `events:read`. `/identify` is a people write — see that section.</Callout>
 
 ## Event Object
 
@@ -55,7 +55,7 @@ ingestion: `/identify` says **who someone is**, `/track` says **what they did**.
 
 ```bash
 curl -X POST https://api.flameup.ai/api/v1/identify \
-  -H "Authorization: Bearer ws_live_..." \
+  -H "Authorization: Bearer {API_KEY}" \
   -H 'Content-Type: application/json' \
   -d '{
     "userId": "user_12345",
@@ -388,7 +388,7 @@ single person.
 
 ```bash
 curl "https://api.flameup.ai/api/v1/events/search?event=purchase_completed&since=2026-01-01T00:00:00Z" \
-  -H "Authorization: Bearer ws_live_..."
+  -H "Authorization: Bearer {API_KEY}"
 ```
 
 Requires `events:read`.

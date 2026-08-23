@@ -372,14 +372,14 @@ Find people by a search term, optionally filtered by status.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `q` | string | Search term. `search` is accepted as an alias |
+| `q` | string | Search term. `search` is accepted as an alias; if both are sent, `q` wins |
 | `status` | string | Filter by status, e.g. `active` |
 | `limit` | integer | Default 50, max 500 |
 | `offset` | integer | Default 0 |
 
 ```bash
 curl "https://api.flameup.ai/api/v1/people/search?q=jane&limit=10" \
-  -H "Authorization: Bearer ws_live_..."
+  -H "Authorization: Bearer {API_KEY}"
 ```
 
 The response is the same shape as [List People](#list-people): `people`,
@@ -548,9 +548,9 @@ A successful delete returns `200 OK`:
 
 Retrieve events for a specific person. See the [Events API](/events) for how events are tracked.
 
-**Endpoint:** `GET /api/v1/people/{id}/events`
+**Endpoint:** `GET /api/v1/people/{external_id}/events`
 
-<Callout kind="info">The `{id}` path parameter is your external `userId`, the same value you sent to `/identify`. This endpoint requires `events:read`.</Callout>
+<Callout kind="info">The `{external_id}` path parameter is your own user id — the same value you sent to `/identify`, not the Flameup person UUID. This endpoint requires `events:read`.</Callout>
 
 ### Query Parameters
 

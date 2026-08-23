@@ -120,14 +120,22 @@ Flameup uses standard HTTP status codes:
   <Expandable title="RESOURCE_CONFLICT" default-open="false">
     **HTTP Status:** 409
 
-    Resource already exists (for unique constraints).
+    Resource already exists (for unique constraints). On the people surface
+    this is flat:
+
+    ```json
+    { "error": "Person with this userId or email already exists" }
+    ```
+
+    The typed form below comes from the workspace and onboarding endpoints,
+    which is the only surface that emits `RESOURCE_CONFLICT`:
 
     ```json
     {
       "success": false,
       "error": {
         "code": "RESOURCE_CONFLICT",
-        "message": "Person with email 'user@example.com' already exists"
+        "message": "A workspace with this name already exists"
       }
     }
     ```
@@ -302,11 +310,14 @@ def fetch_with_retry(url, options, max_retries=3):
 Log errors with context for debugging:
 
 ```javascript
+// `error` is the response body's `error` field, which is a string on most
+// surfaces and an object on the workspace and campaign endpoints.
 function logError(error, context) {
+  const e = typeof error === 'string' ? { message: error } : (error || {});
   console.error('Flameup API Error', {
-    code: error.code,
-    message: error.message,
-    details: error.details,
+    code: e.code,
+    message: e.message,
+    details: e.details,
     context: {
       endpoint: context.endpoint,
       method: context.method,

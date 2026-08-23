@@ -472,7 +472,14 @@ paths:
                   success:
                     type: boolean
                   person:
-                    $ref: '#/components/schemas/IdentifiedPerson'
+                    oneOf:
+                      - $ref: '#/components/schemas/IdentifiedPerson'
+                      - $ref: '#/components/schemas/Person'
+                    description: >-
+                      `IdentifiedPerson` for a key without `people:read` — the
+                      common case for a `pk_live_` key. The full `Person` for a
+                      key that holds `people:read` and could have read the
+                      record anyway.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -589,7 +596,7 @@ paths:
                   total:
                     type: integer
 
-  /people/{id}/events:
+  /people/{external_id}/events:
     get:
       tags:
         - Events
@@ -598,7 +605,7 @@ paths:
         Recent events for one person, newest first. Requires `events:read`.
       operationId: getPersonEventsByExternalId
       parameters:
-        - name: id
+        - name: external_id
           in: path
           required: true
           schema:
@@ -1178,10 +1185,11 @@ components:
     TrackEventRequest:
       type: object
       description: >-
-        `event` is required, plus exactly one identifier. `external_id`,
+        `event` is required, plus at least one identifier. `external_id`,
         `userId` and `user_id` are equal aliases for the same field — send
-        whichever your client already has. Sending two that disagree is
-        rejected rather than resolved by precedence.
+        whichever your client already has. Sending more than one is allowed
+        only while they agree; aliases that disagree are rejected rather than
+        resolved by precedence.
       required:
         - event
       anyOf:

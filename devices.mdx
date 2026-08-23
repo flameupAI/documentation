@@ -547,7 +547,7 @@ The most common failure is a request built against the older workspace-scoped sh
 ```bash
 # WRONG — this route does not exist for API keys
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/devices" \
-  -H "Authorization: Bearer ws_live_..." \
+  -H "Authorization: Bearer {API_KEY}" \
   -d '{"person_id": "...", "device_token": "...", "platform": "android"}'
 ```
 
@@ -563,7 +563,7 @@ Three things differ from the correct call:
 # CORRECT
 curl -X POST "https://api.flameup.ai/api/v1/people/user_12345/devices" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ws_live_..." \
+  -H "Authorization: Bearer {API_KEY}" \
   -d '{
     "token": "eM_WXDy1SCWh9Op_tY46B3:APA91b...",
     "platform": "android",

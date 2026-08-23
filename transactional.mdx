@@ -105,7 +105,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | `external_id` | string | Yes | Your own user id — the same `userId` you send to `/identify` and `/track`. Not the Flameup person UUID |
 | `title` | string | Yes | Notification title |
 | `body` | string | Yes | Notification body text |
-| `platform` | string | No | Target platform: `ios`, `android`, or `all` (default). Web coming soon. |
+| `platform` | string | No | Target platform: `ios`, `android`, `web`, or `all` (default). |
 | `image_url` | string | No | URL for rich notification image |
 | `action_url` | string | No | Deep link URL when notification is tapped |
 | `priority` | string | No | Delivery priority: `low`, `normal`, `high` |
@@ -163,7 +163,7 @@ that it reached the handset. To find out what happened:
 
 ```bash
 curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/push/status/{message_id}" \
-  -H "Authorization: Bearer ws_live_..."
+  -H "Authorization: Bearer {API_KEY}"
 ```
 
 Requires `push:read`.

@@ -103,14 +103,14 @@ async function request(url, options = {}, attempt = 0) {
 ```python
 import time, requests
 
-def request(url, attempt=0, **kwargs):
-    r = requests.request(headers={'Authorization': f'Bearer {API_KEY}'},
-                         url=url, **kwargs)
+def request(method, url, attempt=0, **kwargs):
+    headers = {'Authorization': f'Bearer {API_KEY}', **kwargs.get('headers', {})}
+    r = requests.request(method, url, **{**kwargs, 'headers': headers})
 
     if r.status_code == 429 and attempt < 5:
         retry_after = int(r.headers.get('Retry-After', 0))
         time.sleep(retry_after or 2 ** attempt)
-        return request(url, attempt + 1, **kwargs)
+        return request(method, url, attempt + 1, **kwargs)
 
     return r
 ```
@@ -135,13 +135,17 @@ def request(url, attempt=0, **kwargs):
 
     Batch endpoints let you do more work per request, which helps you stay within the per-IP limit.
   </Expandable>
-  <Expandable title="Monitor Rate Limit Headers" default-open="false">
-    Track your usage to avoid hitting limits:
+  <Expandable title="Log the scope you are hitting" default-open="false">
+    You cannot pace against a budget — the headers arrive only with the
+    rejection. What you can do is record which budget ran out, so a recurring
+    429 points at the right limit:
 
     ```javascript
-    const remaining = response.headers.get('X-RateLimit-Remaining');
-    if (remaining < 100) {
-      console.warn('Approaching rate limit:', remaining);
+    if (response.status === 429) {
+      console.warn('rate limited', {
+        scope: response.headers.get('X-RateLimit-Scope'),
+        retryAfter: response.headers.get('Retry-After')
+      });
     }
     ```
   </Expandable>
