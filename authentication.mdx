@@ -43,7 +43,7 @@ A public key is restricted by the server, not by convention: a permission
 outside that list is rejected when the key is created **and** when it is
 updated, so one cannot be widened later.
 
-<Callout kind="warning">Never ship a `ws_` key in a mobile app or a web page. It can read your entire person table, send messages to anyone, and create further keys. The `pk_` prefix exists so a secret scanner can tell the two apart — allowlist `pk_`, alert on `ws_`.</Callout>
+<Callout kind="warning">Never ship a `ws_` key in a mobile app or a web page. A `ws_` key can be granted permissions a public key cannot hold — reading your whole person table, sending messages to anyone — so a leaked one is only as limited as whatever it happens to carry. The `pk_` prefix exists so a secret scanner can tell the two apart: allowlist `pk_`, alert on `ws_`.</Callout>
 
 ## Authentication Methods
 
@@ -225,7 +225,6 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" 
 | `key_type` | no | `secret` (default) or `public` |
 | `environment` | no | `live` (default) or `test` |
 | `expires_at` | no | ISO 8601. Must be in the future |
-| `ip_whitelist` | no | Array of IPs or CIDR ranges |
 
 **Response (`201`):**
 
