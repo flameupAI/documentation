@@ -1277,10 +1277,18 @@ components:
           minLength: 10
           maxLength: 4096
           description: >-
-            The FCM/APNs token from the device. Note the asymmetry: this field is named
-            `token` on the way in, but is returned as `device_token` on the Device object.
-            The person and workspace are taken from the path and the API key respectively,
-            so `person_id` and `workspace_id` are not accepted here.
+            The FCM/APNs token from the device, as an opaque string of 10-4096
+            characters. For `platform: web` this is the FCM **web registration
+            token** from `getToken()` — not a Web Push `PushSubscription`
+            object, which is rejected.
+
+
+            Note the asymmetry: this field is named `token` on the way in, but is
+            returned as `device_token` on the Device object. The person and
+            workspace are taken from the path and the API key respectively, so
+            `person_id` and `workspace_id` are not accepted here.
+          minLength: 10
+          maxLength: 4096
         platform:
           type: string
           description: Device platform

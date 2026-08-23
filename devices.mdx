@@ -164,8 +164,15 @@ Register a device token to enable push notifications for a user.
   </Tab>
   <Tab title="Web Push" icon="globe">
 
+    <Callout kind="warning">Anything in browser JavaScript is readable by every
+    visitor, so the key below **must** be a `pk_live_` public key holding
+    `devices:register` — never a `ws_live_` secret key. Treat it as published.
+    If you would rather publish nothing, proxy registration through your own
+    server and keep the secret key there.</Callout>
+
     ```javascript
-    // After obtaining FCM token in your web app
+    // PUBLIC_KEY is a pk_live_ key with devices:register. It ships to the
+    // browser; that is expected, and why it cannot hold any other scope.
     async function registerWebDevice(externalId, fcmToken) {
       const response = await fetch(
         `https://api.flameup.ai/api/v1/people/${externalId}/devices`,
@@ -173,7 +180,7 @@ Register a device token to enable push notifications for a user.
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`
+            'Authorization': `Bearer ${PUBLIC_KEY}`
           },
           body: JSON.stringify({
             token: fcmToken,
@@ -466,16 +473,23 @@ FCM tokens can change. Handle token refresh in your app:
   <Tab title="Web" icon="globe">
 
     ```javascript
-    import { onMessage, getToken } from 'firebase/messaging';
+    import { getMessaging, getToken } from 'firebase/messaging';
 
-    // Listen for token refresh
+    const messaging = getMessaging();
+
+    // FCM rotates web tokens. Re-register the new one against the same
+    // person, using the helper from the registration tab above.
     navigator.serviceWorker.addEventListener('message', async (event) => {
       if (event.data.type === 'TOKEN_REFRESH') {
-        const newToken = await getToken(messaging);
-        await registerDevice(newToken);
+        const newToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+        await registerWebDevice(externalId, newToken);
       }
     });
     ```
+
+    Registering a refreshed token does not strand the old one: registration
+    upserts on the token, and a token FCM has rotated away from stops being
+    delivered to.
   </Tab>
 </Tabs>
 
@@ -531,7 +545,7 @@ FCM tokens can change. Handle token refresh in your app:
 | Issue | Solution |
 |-------|----------|
 | Token not registered | Verify the `external_id` names a person and the token is valid |
-| Wrong platform | Ensure `platform` matches the device (ios/android) |
+| Wrong platform | Ensure `platform` matches the device (`ios`/`android`/`web`) |
 | Invalid token | Token may have expired; request a fresh token from FCM |
 | User not receiving | Check `is_active` and `is_valid` are both `true` |
 | Notification blocked | User may have disabled notifications in device settings |
