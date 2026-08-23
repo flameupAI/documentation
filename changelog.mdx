@@ -61,27 +61,29 @@ We're excited to announce the general availability of the Flameup API!
 
 ### Campaigns
 - Event-triggered campaigns
-- Webhook-triggered campaigns (API-initiated)
-- Scheduled campaigns with cron expressions
-- Dynamic schedule campaigns based on user attributes
-- Template personalization with Handlebars syntax
+- API-initiated campaign triggering (`POST /campaigns/{id}/trigger`)
+- Scheduled and dynamic-schedule campaigns
+
+Campaigns are authored in the dashboard. The API triggers them; it does not
+create or edit them.
 
 ### Messaging APIs
 - Push notifications via FCM (iOS and Android; Web coming soon)
-- Email sending via Resend
 - Platform-specific options for iOS and Android
-- SMS support coming soon
+- Batch push, delivery status, and token suppression
+
+Email and SMS are sent through campaigns and the dashboard, not through an API
+key.
 
 ### Authentication
 - API key authentication via `Authorization: Bearer` header
 - Granular permissions system
-- IP whitelisting support
 - Key expiration and rotation
 
 ### Developer Experience
 - Comprehensive API documentation
 - OpenAPI 3.0 specification
-- Code examples in JavaScript, Python, Swift, and Kotlin
+- Code examples in JavaScript, Python and Dart
 - Rate limiting with informative headers
 </Update>
 
@@ -91,9 +93,9 @@ We're excited to announce the general availability of the Flameup API!
 
 We're working on these features for upcoming releases:
 
-### Email Channel
-Send transactional and campaign emails through Flameup:
-- Email templates with rich HTML support
+### Email via the API
+Email works in campaigns today. Bringing it to the public API:
+- Send a templated email with an API key
 - Delivery tracking and analytics
 - Bounce and complaint handling
 

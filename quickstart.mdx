@@ -373,4 +373,4 @@ curl "https://api.flameup.ai/api/v1/people/user_12345" \
   </Card>
 </Columns>
 
-<Callout kind="tip">When you're ready for production, create a **Live** API key and update your integration. Test and live environments are completely separate.</Callout>
+<Callout kind="warning">Keys carry a `live` or `test` label, but **the label does not separate your data** — both write to the same workspace. There is no sandbox today, so treat anything you send as real.</Callout>
