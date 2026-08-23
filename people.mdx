@@ -366,7 +366,26 @@ curl "https://api.flameup.ai/api/v1/people?limit=50&offset=0" \
 
 ## Search People
 
-<Callout kind="info">Programmatic search and filtering are not yet available. The `GET /api/v1/people/search` endpoint currently ignores all query parameters and returns the same paginated people list as [List People](#list-people). To look up a specific person, use [Get a Person](#get-a-person) with their `userId`.</Callout>
+Find people by a search term, optionally filtered by status.
+
+**Endpoint:** `GET /api/v1/people/search`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `q` | string | Search term. `search` is accepted as an alias |
+| `status` | string | Filter by status, e.g. `active` |
+| `limit` | integer | Default 50, max 500 |
+| `offset` | integer | Default 0 |
+
+```bash
+curl "https://api.flameup.ai/api/v1/people/search?q=jane&limit=10" \
+  -H "Authorization: Bearer ws_live_..."
+```
+
+The response is the same shape as [List People](#list-people): `people`,
+`total`, `limit`, `offset`.
+
+<Callout kind="tip">Omitting `q` returns the whole workspace, paginated — the same as List People. If you know the exact identifier, [Get a Person](#get-a-person) is cheaper.</Callout>
 
 ## Batch Upsert
 

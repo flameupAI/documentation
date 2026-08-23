@@ -5,20 +5,33 @@ description: Understanding and handling Flameup API errors
 
 ## Error Response Format
 
-Flameup API errors use the following format:
+**Most errors are flat.** Write your handler against this shape first — it is
+what the great majority of endpoints return, including everything on the
+ingestion, people and device surfaces:
+
+```json
+{
+  "error": "Person not found"
+}
+```
+
+Some responses add a `message` alongside it with more detail.
+
+A minority of endpoints — mainly workspace and campaign management — return a
+typed envelope instead:
 
 ```json
 {
   "success": false,
   "error": {
-    "type": "ERROR_TYPE",
+    "type": "VALIDATION_ERROR",
     "message": "Human-readable error message"
   },
   "request_id": "req_abc123"
 }
 ```
 
-<Callout kind="info">Some endpoints may return a simplified format: `{"error": "message", "message": "details"}`. Check the specific endpoint documentation.</Callout>
+<Callout kind="warning">Read `error` defensively: it is a **string** on most responses and an **object** on some. `typeof err.error === 'string' ? err.error : err.error.message` covers both.</Callout>
 
 ## HTTP Status Codes
 

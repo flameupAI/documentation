@@ -5,49 +5,52 @@ description: Understanding Flameup API rate limits and quotas
 
 ## Overview
 
-Flameup implements rate limiting to ensure fair usage and platform stability. Rate limits are applied per IP address and vary by endpoint type.
+Rate limits are applied in **scopes**. Which scope a request falls into depends
+on the route and how the request is authenticated — not on a single global pool.
 
-## Rate Limit Tiers
+The two that matter for an API-key integration are **ingestion** and **reads**,
+and both are generous: 12,000 writes a minute for a whole workspace.
 
-<Columns cols={2}>
-  <Card title="API requests" icon="globe">
-    **75 requests/minute**
+## Limits
 
-    All API traffic, including requests made with an API key. Tracked per IP address.
-  </Card>
-  <Card title="Dashboard" icon="key">
-    **120 requests/minute**
+| Scope | Limit | Burst | Counted per | Applies to |
+|---|---|---|---|---|
+| Ingestion | **12,000/min** | 2,000 | Workspace | `/track`, `/track/batch`, `/identify`, people writes |
+| Device registration | **6,000/min** | 1,000 | Workspace | `/people/{id}/devices` register and unregister |
+| Reads | **1,200/min** | 300 | Workspace | People and device reads, campaign triggers, push |
+| Dashboard | **1,200/min** | 300 | User | Firebase-authenticated dashboard sessions |
+| Unauthenticated | **120/min** | 60 | IP | Public routes, e.g. invitation lookup |
+| Provider webhooks | **600/min** | 300 | IP | Inbound FCM / APNs / email / SMS callbacks |
+| Edge backstop | **6,000/min** | 600 | IP | Every request, as a floor under the above |
 
-    Dashboard (Firebase) sessions only. Does not apply to API-key requests.
-  </Card>
-</Columns>
+<Callout kind="info">Ingestion and device registration are metered **separately**, on purpose. A burst of events cannot use up the budget that registers push tokens — a token that fails to register means every later notification silently goes nowhere.</Callout>
 
-## Current Rate Limits
+Limits are per workspace, not per key: three keys in one workspace share one
+ingestion budget.
 
-Rate limits are applied globally per IP address, not per endpoint:
+## Burst
 
-| Surface | Limit | Window |
-|---------|-------|--------|
-| API requests (with or without API key) | 75/min | Per IP |
-| Dashboard (Firebase) sessions | 120/min | Per user |
-
-<Callout kind="info">All API requests share the same per-IP rate limit pool, regardless of endpoint or whether an API key is used. Plan your request patterns accordingly.</Callout>
+Each scope has a burst allowance on top of its per-minute rate. Burst is what a
+short spike can consume before the sustained rate applies — 2,000 ingestion
+requests can arrive at once, then the 12,000/min rate governs.
 
 ## Rate Limit Headers
 
 Rate limit headers are returned **only on `429 Too Many Requests` responses** — successful responses do not include them:
 
 ```
-X-RateLimit-Limit: 37
+X-RateLimit-Limit: 12000
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1705320660
 ```
 
 | Header | Description |
 |--------|-------------|
-| `X-RateLimit-Limit` | Currently reports the burst value (roughly half the per-minute limit), not the per-minute maximum |
-| `X-RateLimit-Remaining` | Requests remaining in the current window (`0` on a 429) |
+| `X-RateLimit-Limit` | The per-minute limit of the scope you hit |
+| `X-RateLimit-Remaining` | Always `0` — the header is only sent on a 429 |
 | `X-RateLimit-Reset` | Unix timestamp when the window resets |
+
+<Callout kind="tip">Because the headers only appear on a `429`, you cannot use them to pace yourself in advance. Back off when you see one rather than trying to track a budget.</Callout>
 
 ## Handling Rate Limits
 

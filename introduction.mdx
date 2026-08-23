@@ -104,85 +104,87 @@ https://api.flameup.ai/api/v1/workspaces/{workspace_id}/{resource}
 
 ## Quick Example
 
-Here's a complete example showing how to identify a user and track an event:
+Two calls: describe a person, then record something they did. The workspace comes
+from the key, so it never appears in the URL or the body.
 
 <CodeGroup>
 ```javascript
-// Initialize with your API key
 const API_KEY = 'ws_live_abc12345_abc123.your_secret_here';
-const WORKSPACE_ID = 'your_workspace_id';
 const BASE_URL = 'https://api.flameup.ai/api/v1';
 
-// Identify a user
-const response = await fetch(
-  `${BASE_URL}/people`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      userId: 'user_123',
-      email: 'jane@example.com',
-      traits: {
-        first_name: 'Jane',
-        last_name: 'Doe',
-        plan: 'premium'
-      }
-    })
-  }
-);
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${API_KEY}`
+};
 
-const user = await response.json();
-console.log('User created:', user.id);
+// 1. Identify — creates or updates the person, keyed on your own user id
+await fetch(`${BASE_URL}/identify`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    userId: 'user_123',
+    email: 'jane@example.com',
+    traits: { first_name: 'Jane', plan: 'premium' }
+  })
+});
+
+// 2. Track — this is what campaigns trigger on
+await fetch(`${BASE_URL}/track`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    userId: 'user_123',
+    event: 'signed_up',
+    parameters: { source: 'organic' }
+  })
+});
 ```
 
 ```python
 import requests
 
 API_KEY = 'ws_live_abc12345_abc123.your_secret_here'
-WORKSPACE_ID = 'your_workspace_id'
 BASE_URL = 'https://api.flameup.ai/api/v1'
+headers = {'Authorization': f'Bearer {API_KEY}'}
 
-# Identify a user
-response = requests.post(
-    f'{BASE_URL}/people',
-    headers={
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {API_KEY}'
-    },
-    json={
-        'userId': 'user_123',
-        'email': 'jane@example.com',
-        'traits': {
-            'first_name': 'Jane',
-            'last_name': 'Doe',
-            'plan': 'premium'
-        }
-    }
-)
+# 1. Identify
+requests.post(f'{BASE_URL}/identify', headers=headers, json={
+    'userId': 'user_123',
+    'email': 'jane@example.com',
+    'traits': {'first_name': 'Jane', 'plan': 'premium'}
+})
 
-user = response.json()
-print(f"User created: {user['id']}")
+# 2. Track
+requests.post(f'{BASE_URL}/track', headers=headers, json={
+    'userId': 'user_123',
+    'event': 'signed_up',
+    'parameters': {'source': 'organic'}
+})
 ```
 
 ```bash
-# Identify a user with cURL
-curl -X POST "https://api.flameup.ai/api/v1/people" \
-  -H "Content-Type: application/json" \
+curl -X POST https://api.flameup.ai/api/v1/identify \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
-  -d '{
-    "userId": "user_123",
-    "email": "jane@example.com",
-    "traits": {
-      "first_name": "Jane",
-      "last_name": "Doe",
-      "plan": "premium"
-    }
-  }'
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"user_123","email":"jane@example.com","traits":{"plan":"premium"}}'
+
+curl -X POST https://api.flameup.ai/api/v1/track \
+  -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"user_123","event":"signed_up","parameters":{"source":"organic"}}'
 ```
 </CodeGroup>
+
+<Callout kind="tip">`/track` creates the person if it has not seen that id, so the order does not matter and there is no first-event race. The response says `"person_created": true` when it did — useful for catching a mistyped identifier.</Callout>
+
+## Health
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness. Returns `{status: "alive"}` |
+| `GET /api/v1/health` | Readiness, with per-service status for the database and event store |
+
+Neither requires authentication, and neither counts against your rate limit.
 
 ## Next Steps
 
