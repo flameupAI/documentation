@@ -344,11 +344,17 @@ It also registers the current FCM token against that user, so a normal app never
 
 `logoutUser()` unregisters this device **before** clearing local state. Skip it and the next person to use that handset keeps receiving the previous user's notifications.
 
-#### Traits come from your backend
+#### Traits
 
-A public key cannot call `/identify` — that route requires `people:write`, which a client-embedded key must never hold. Send traits from your server, where the key can be scoped for it.
+A public key *can* call `/identify`, but only if it holds `people:identify` —
+a narrow scope that authorizes that one route and nothing else. It exists so an
+app can set the traits it is the source of (locale, app version, notification
+opt-in) without holding `people:write`, which would let it rewrite any person in
+the workspace.
 
-This is deliberate: journeys branch on traits, so a client that could write them could reroute any user it could name.
+Send traits your backend owns — plan, entitlements, lifetime value — from your
+backend. Those are the ones journeys branch on, and a client that could write
+them could reroute any user it could name.
 
 #### Required scope
 
@@ -357,6 +363,10 @@ This is deliberate: journeys branch on traits, so a client that could write them
 | `devices:register` | Yes | **No** — deliberately excluded |
 | `devices:write` | Yes | Yes |
 | `devices:read` | No | Yes |
+
+The three scopes a shipped app may hold are `events:write`, `devices:register`
+and `people:identify`. A public key is rejected at creation if you ask for
+anything else.
 
 `devices:register` exists so an app can enrol its own device without being able to enumerate every device token in the workspace. Use it in a shipped app, never `devices:write`.
 

@@ -246,7 +246,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" 
 | `name` | yes | Shown in the dashboard list |
 | `permissions` | yes | See [Permissions](#permissions). Validated against `key_type` |
 | `key_type` | no | `secret` (default) or `public` |
-| `environment` | no | `live` (default) or `test` |
+| `environment` | no | `live` (default) or `test`. A label only — see below |
 | `expires_at` | no | ISO 8601. Must be in the future |
 
 **Response (`201`):**
@@ -269,6 +269,12 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" 
 nowhere else. `key_prefix` is safe to log and to display later.
 
 <Callout kind="info">Asking for a permission that a public key may not hold returns `400` with the allowed list in the message, before any key is created — so a rejected request never leaves a half-made key behind.</Callout>
+
+<Callout kind="warning">**`environment` does not isolate data.** It is recorded on
+the key and shown in the dashboard, but no query filters by it: a `ws_test_` key
+writes to the same tables a `ws_live_` key reads. To keep test traffic out of
+your real data, use a **separate workspace** — that boundary is enforced on
+every read and write.</Callout>
 
 ## Security Features
 
@@ -321,7 +327,7 @@ Returned when rate limits are exceeded:
 
 <ExpandableGroup>
   <Expandable title="Use Environment-Specific Keys" default-open="true">
-    Create separate API keys for development, staging, and production. Never use production keys in development environments.
+    Use a separate **workspace** per environment, with its own keys. Separate keys alone do not separate data — only the workspace boundary does. Never use production keys in development.
   </Expandable>
   <Expandable title="Apply Least Privilege" default-open="false">
     Only grant the minimum permissions required. A key that only needs to track events shouldn't have campaign management permissions.

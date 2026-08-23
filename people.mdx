@@ -550,7 +550,7 @@ Retrieve events for a specific person. See the [Events API](/events) for how eve
 
 **Endpoint:** `GET /api/v1/people/{id}/events`
 
-<Callout kind="info">The `{id}` path parameter is your external `userId`. This endpoint requires the API key's `events:write` permission.</Callout>
+<Callout kind="info">The `{id}` path parameter is your external `userId`, the same value you sent to `/identify`. This endpoint requires `events:read`.</Callout>
 
 ### Query Parameters
 
