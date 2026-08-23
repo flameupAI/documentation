@@ -5,49 +5,58 @@ description: Understanding Flameup API rate limits and quotas
 
 ## Overview
 
-Flameup implements rate limiting to ensure fair usage and platform stability. Rate limits are applied per IP address and vary by endpoint type.
+Rate limits are applied in **scopes**. Which scope a request falls into depends
+on the route and how the request is authenticated — not on a single global pool.
 
-## Rate Limit Tiers
+The two that matter for an API-key integration are **ingestion** at
+12,000/min and **reads** at 1,200/min, both counted per workspace. Writes are
+deliberately the generous one: reads are a tenth of that, so a polling loop
+will hit its ceiling long before an event firehose does.
 
-<Columns cols={2}>
-  <Card title="API requests" icon="globe">
-    **75 requests/minute**
+## Limits
 
-    All API traffic, including requests made with an API key. Tracked per IP address.
-  </Card>
-  <Card title="Dashboard" icon="key">
-    **120 requests/minute**
+| Scope | Limit | Burst | Counted per | Applies to |
+|---|---|---|---|---|
+| Ingestion | **12,000/min** | 2,000 | Workspace | `/track`, `/track/batch`, `/identify`, people writes |
+| Device registration | **6,000/min** | 1,000 | Workspace | `/people/{id}/devices` register and unregister |
+| Reads | **1,200/min** | 300 | Workspace | People and device reads, campaign triggers, push |
+| Dashboard | **1,200/min** | 300 | User | Firebase-authenticated dashboard sessions |
+| Unauthenticated | **120/min** | 60 | IP | Public routes, e.g. invitation lookup |
+| Provider webhooks | **600/min** | 300 | IP | Inbound FCM / APNs / email / SMS callbacks |
+| Edge backstop | **6,000/min** | 600 | IP | Every request, as a floor under the above |
 
-    Dashboard (Firebase) sessions only. Does not apply to API-key requests.
-  </Card>
-</Columns>
+<Callout kind="info">Ingestion and device registration are metered **separately**, on purpose. A burst of events cannot use up the budget that registers push tokens — a token that fails to register means every later notification silently goes nowhere.</Callout>
 
-## Current Rate Limits
+Limits are per workspace, not per key: three keys in one workspace share one
+ingestion budget.
 
-Rate limits are applied globally per IP address, not per endpoint:
+## Burst
 
-| Surface | Limit | Window |
-|---------|-------|--------|
-| API requests (with or without API key) | 75/min | Per IP |
-| Dashboard (Firebase) sessions | 120/min | Per user |
-
-<Callout kind="info">All API requests share the same per-IP rate limit pool, regardless of endpoint or whether an API key is used. Plan your request patterns accordingly.</Callout>
+Each scope has a burst allowance on top of its per-minute rate. Burst is what a
+short spike can consume before the sustained rate applies — 2,000 ingestion
+requests can arrive at once, then the 12,000/min rate governs.
 
 ## Rate Limit Headers
 
 Rate limit headers are returned **only on `429 Too Many Requests` responses** — successful responses do not include them:
 
 ```
-X-RateLimit-Limit: 37
+X-RateLimit-Limit: 12000
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1705320660
+X-RateLimit-Scope: ws-ingest
+Retry-After: 37
 ```
 
 | Header | Description |
 |--------|-------------|
-| `X-RateLimit-Limit` | Currently reports the burst value (roughly half the per-minute limit), not the per-minute maximum |
-| `X-RateLimit-Remaining` | Requests remaining in the current window (`0` on a 429) |
+| `Retry-After` | Seconds to wait. **This is the one to honour** — the `X-RateLimit-*` trio is convention, `Retry-After` is the standard clients and proxies already understand. Capped at 3600. |
+| `X-RateLimit-Limit` | The per-minute limit of the scope you hit |
+| `X-RateLimit-Remaining` | Always `0` — the header is only sent on a 429 |
 | `X-RateLimit-Reset` | Unix timestamp when the window resets |
+| `X-RateLimit-Scope` | Which budget was exhausted, e.g. `ws-ingest`, `edge`. Lets you tell "my workspace is over quota" from "the shared backstop is shedding load". |
+
+<Callout kind="tip">Because the headers only appear on a `429`, you cannot use them to pace yourself in advance. Back off when you see one rather than trying to track a budget.</Callout>
 
 ## Handling Rate Limits
 
@@ -56,107 +65,61 @@ When you exceed the rate limit, you'll receive a `429 Too Many Requests` respons
 ```json
 {
   "error": "Rate limit exceeded",
-  "message": "Too many requests. Please try again later."
+  "message": "Too many requests. Please try again later.",
+  "scope": "ws-ingest",
+  "gate": "local"
 }
 ```
 
-The response headers will contain timing information for when you can retry.
+`scope` names the budget you exhausted, matching `X-RateLimit-Scope`. `gate` is
+`local` when your own limit was hit and `shared` when the process-wide backstop
+was shedding load. Quote both if you contact support.
 
 ### Implementing Backoff
 
+The headers only appear on a `429`, so there is nothing to pace against in
+advance. React to the rejection instead:
+
 <CodeGroup>
 ```javascript
-class FlameupClient {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
-    this.rateLimitRemaining = 1000;
-    this.rateLimitReset = null;
+const MAX_RETRIES = 5; // retries after the first attempt, so 6 requests at worst
+
+async function request(url, options = {}, attempt = 0) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { Authorization: `Bearer ${API_KEY}`, ...options.headers }
+  });
+
+  if (response.status === 429 && attempt < MAX_RETRIES) {
+    // Retry-After is in seconds and is the header to trust.
+    const retryAfter = parseInt(response.headers.get('Retry-After') || '0');
+    const wait = (retryAfter || 2 ** attempt) * 1000;
+    await new Promise(r => setTimeout(r, wait));
+    return request(url, options, attempt + 1);
   }
 
-  async request(endpoint, options = {}) {
-    // Check if we should wait
-    if (this.rateLimitRemaining <= 0 && this.rateLimitReset) {
-      const waitTime = this.rateLimitReset - Date.now();
-      if (waitTime > 0) {
-        await this.sleep(waitTime);
-      }
-    }
-
-    const response = await fetch(endpoint, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        ...options.headers
-      }
-    });
-
-    // Update rate limit tracking
-    this.rateLimitRemaining = parseInt(
-      response.headers.get('X-RateLimit-Remaining') || '1000'
-    );
-    this.rateLimitReset = parseInt(
-      response.headers.get('X-RateLimit-Reset') || '0'
-    ) * 1000;
-
-    if (response.status === 429) {
-      // Use X-RateLimit-Reset header or default wait time
-      const resetTime = parseInt(response.headers.get('X-RateLimit-Reset') || '0') * 1000;
-      const waitTime = resetTime > Date.now() ? resetTime - Date.now() : 60000;
-      await this.sleep(waitTime);
-      return this.request(endpoint, options); // Retry
-    }
-
-    return response;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  return response;
 }
 ```
 
 ```python
-import time
-import requests
+import time, requests
 
-class FlameupClient:
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.rate_limit_remaining = 1000
-        self.rate_limit_reset = None
+MAX_RETRIES = 5  # retries after the first attempt, so 6 requests at worst
 
-    def request(self, endpoint, method='GET', **kwargs):
-        # Check if we should wait
-        if self.rate_limit_remaining <= 0 and self.rate_limit_reset:
-            wait_time = self.rate_limit_reset - time.time()
-            if wait_time > 0:
-                time.sleep(wait_time)
+def request(method, url, attempt=0, **kwargs):
+    headers = {'Authorization': f'Bearer {API_KEY}', **kwargs.get('headers', {})}
+    r = requests.request(method, url, **{**kwargs, 'headers': headers})
 
-        headers = kwargs.pop('headers', {})
-        headers['Authorization'] = f'Bearer {self.api_key}'
+    if r.status_code == 429 and attempt < MAX_RETRIES:
+        retry_after = int(r.headers.get('Retry-After', 0))
+        time.sleep(retry_after or 2 ** attempt)
+        return request(method, url, attempt + 1, **kwargs)
 
-        response = requests.request(
-            method, endpoint, headers=headers, **kwargs
-        )
-
-        # Update rate limit tracking
-        self.rate_limit_remaining = int(
-            response.headers.get('X-RateLimit-Remaining', 1000)
-        )
-        self.rate_limit_reset = int(
-            response.headers.get('X-RateLimit-Reset', 0)
-        )
-
-        if response.status_code == 429:
-            # Use X-RateLimit-Reset header or default wait time
-            reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
-            wait_time = max(reset_time - time.time(), 60) if reset_time else 60
-            time.sleep(wait_time)
-            return self.request(endpoint, method, **kwargs)  # Retry
-
-        return response
+    return r
 ```
 </CodeGroup>
+
 
 ## Best Practices
 
@@ -176,13 +139,17 @@ class FlameupClient:
 
     Batch endpoints let you do more work per request, which helps you stay within the per-IP limit.
   </Expandable>
-  <Expandable title="Monitor Rate Limit Headers" default-open="false">
-    Track your usage to avoid hitting limits:
+  <Expandable title="Log the scope you are hitting" default-open="false">
+    You cannot pace against a budget — the headers arrive only with the
+    rejection. What you can do is record which budget ran out, so a recurring
+    429 points at the right limit:
 
     ```javascript
-    const remaining = response.headers.get('X-RateLimit-Remaining');
-    if (remaining < 100) {
-      console.warn('Approaching rate limit:', remaining);
+    if (response.status === 429) {
+      console.warn('rate limited', {
+        scope: response.headers.get('X-RateLimit-Scope'),
+        retryAfter: response.headers.get('Retry-After')
+      });
     }
     ```
   </Expandable>
@@ -225,18 +192,11 @@ class FlameupClient:
     }
     ```
   </Expandable>
-  <Expandable title="Use Webhooks for Real-Time Updates" default-open="false">
-    Instead of polling, use webhooks to receive updates:
-
-    - Reduces API calls
-    - Provides real-time notifications
-    - More efficient than frequent polling
-  </Expandable>
 </ExpandableGroup>
 
 ## Requesting Higher Limits
 
 If you need higher rate limits:
 
-1. **Optimize your integration** - Use batching, caching, and webhooks
+1. **Optimize your integration** - Use the batch endpoints and cache reads
 2. **Contact support** - Explain your use case for a limit increase

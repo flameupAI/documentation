@@ -1,11 +1,17 @@
 ---
-title: SDKs & Libraries
-description: Official and community libraries for integrating with Flameup
+title: Client Examples
+description: Copy-paste HTTP clients for integrating with Flameup
 ---
 
 ## Overview
 
-While you can use Flameup's REST API directly, we provide SDKs and libraries to make integration easier.
+**There is no Flameup SDK to install.** No package is published on npm, PyPI,
+pub.dev, CocoaPods or Maven. Integration is plain HTTPS against
+`https://api.flameup.ai/api/v1`, which needs nothing beyond an HTTP client you
+already have.
+
+What follows are thin, dependency-light clients you can copy into your codebase
+and edit. They are examples, not a supported library — you own the copy.
 
 ## REST API
 
@@ -195,12 +201,12 @@ class Flameup:
             }
         ).json()
 
-    def send_push(self, person_id, title, body, **options):
+    def send_push(self, external_id, title, body, **options):
         """Send a push notification."""
         return self.session.post(
             self._url('/push/send'),
             json={
-                'person_id': person_id,
+                'external_id': external_id,
                 'title': title,
                 'body': body,
                 **options
@@ -270,145 +276,7 @@ async def main():
 asyncio.run(main())
 ```
 
-## Mobile SDKs
-
-### iOS (Swift)
-
-```swift
-import Foundation
-
-class Flameup {
-    private let apiKey: String
-    private let workspaceId: String
-    private let baseURL = "https://api.flameup.ai/api/v1"
-
-    init(apiKey: String, workspaceId: String) {
-        self.apiKey = apiKey
-        self.workspaceId = workspaceId
-    }
-
-    func identify(userId: String, traits: [String: Any] = [:]) async throws {
-        let url = URL(string: "\(baseURL)/people")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "userId": userId,
-            "traits": traits
-        ])
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw FlameupError.requestFailed
-        }
-    }
-
-    func track(externalId: String, event: String, parameters: [String: Any] = [:]) async throws {
-        let url = URL(string: "\(baseURL)/track")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "external_id": externalId,
-            "event": event,
-            "parameters": parameters,
-            "timestamp": ISO8601DateFormatter().string(from: Date())
-        ])
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw FlameupError.requestFailed
-        }
-    }
-}
-
-enum FlameupError: Error {
-    case requestFailed
-}
-
-// Usage
-let flare = Flameup(apiKey: "ws_live_abc12345_abc123.your_secret_here", workspaceId: "ws_abc123")
-
-Task {
-    try await flare.identify(userId: "user_123", traits: [
-        "email": "jane@example.com",
-        "first_name": "Jane"
-    ])
-
-    try await flare.track(externalId: "user_123", event: "app_opened")
-}
-```
-
-### Android (Kotlin)
-
-```kotlin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-
-class Flameup(
-    private val apiKey: String,
-    private val workspaceId: String
-) {
-    private val client = OkHttpClient()
-    private val baseUrl = "https://api.flameup.ai/api/v1"
-    private val jsonMediaType = "application/json".toMediaType()
-
-    suspend fun identify(userId: String, traits: Map<String, Any> = emptyMap()) {
-        withContext(Dispatchers.IO) {
-            val body = JSONObject().apply {
-                put("userId", userId)
-                put("traits", JSONObject(traits))
-            }
-
-            val request = Request.Builder()
-                .url("$baseUrl/people")
-                .post(body.toString().toRequestBody(jsonMediaType))
-                .header("Authorization", "Bearer $apiKey")
-                .build()
-
-            client.newCall(request).execute()
-        }
-    }
-
-    suspend fun track(externalId: String, event: String, parameters: Map<String, Any> = emptyMap()) {
-        withContext(Dispatchers.IO) {
-            val body = JSONObject().apply {
-                put("external_id", externalId)
-                put("event", event)
-                put("parameters", JSONObject(parameters))
-                put("timestamp", java.time.Instant.now().toString())
-            }
-
-            val request = Request.Builder()
-                .url("$baseUrl/track")
-                .post(body.toString().toRequestBody(jsonMediaType))
-                .header("Authorization", "Bearer $apiKey")
-                .build()
-
-            client.newCall(request).execute()
-        }
-    }
-}
-
-// Usage
-val flare = Flameup("ws_live_abc12345_abc123.your_secret_here", "ws_abc123")
-
-lifecycleScope.launch {
-    flare.identify("user_123", mapOf(
-        "email" to "jane@example.com",
-        "first_name" to "Jane"
-    ))
-
-    flare.track(externalId = "user_123", event = "app_opened")
-}
-```
+## Mobile
 
 ### Flutter (Dart)
 
@@ -476,11 +344,29 @@ It also registers the current FCM token against that user, so a normal app never
 
 `logoutUser()` unregisters this device **before** clearing local state. Skip it and the next person to use that handset keeps receiving the previous user's notifications.
 
-#### Traits come from your backend
+#### Traits
 
-A public key cannot call `/identify` — that route requires `people:write`, which a client-embedded key must never hold. Send traits from your server, where the key can be scoped for it.
+A public key *can* call `/identify`, if it holds `people:identify`. That scope
+is narrow in one sense only: it authorizes this one route and nothing else,
+where `people:write` would also open the rest of the People API.
 
-This is deliberate: journeys branch on traits, so a client that could write them could reroute any user it could name.
+**Be clear about what it does not do.** `people:identify` gates the route; it
+does not restrict *which* person you may write or *which* trait keys you may
+set. The request names the person by `userId` (with `external_id` and `user_id`
+accepted as aliases), so a key that ships inside your app can write any trait on
+any person whose identifier someone can guess or read out of your own API
+responses. Nothing in the request proves the install
+belongs to that person.
+
+That is why backend-owned traits — plan, entitlements, lifetime value — should
+still be written by your backend with a secret key. Not because the public key
+is forbidden from writing them, but because anything your app can send, someone
+holding your extracted key can also send. Journeys branch on those traits, so a
+forged write reroutes a real user's messages.
+
+Keep client-sent traits to the ones the device is genuinely the source of and
+that carry no routing weight on their own: locale, app version, notification
+permission.
 
 #### Required scope
 
@@ -489,6 +375,10 @@ This is deliberate: journeys branch on traits, so a client that could write them
 | `devices:register` | Yes | **No** — deliberately excluded |
 | `devices:write` | Yes | Yes |
 | `devices:read` | No | Yes |
+
+The three scopes a shipped app may hold are `events:write`, `devices:register`
+and `people:identify`. A public key is rejected at creation if you ask for
+anything else.
 
 `devices:register` exists so an app can enrol its own device without being able to enumerate every device token in the workspace. Use it in a shipped app, never `devices:write`.
 

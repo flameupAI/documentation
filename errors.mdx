@@ -5,20 +5,33 @@ description: Understanding and handling Flameup API errors
 
 ## Error Response Format
 
-Flameup API errors use the following format:
+**Most errors are flat.** Write your handler against this shape first — it is
+what the great majority of endpoints return, including everything on the
+ingestion, people and device surfaces:
+
+```json
+{
+  "error": "Person not found"
+}
+```
+
+Some responses add a `message` alongside it with more detail.
+
+A minority of endpoints — mainly workspace and campaign management — return a
+typed envelope instead:
 
 ```json
 {
   "success": false,
   "error": {
-    "type": "ERROR_TYPE",
-    "message": "Human-readable error message"
-  },
-  "request_id": "req_abc123"
+    "code": "VALIDATION_ERROR",
+    "message": "Human-readable error message",
+    "details": "field: what was wrong with it"
+  }
 }
 ```
 
-<Callout kind="info">Some endpoints may return a simplified format: `{"error": "message", "message": "details"}`. Check the specific endpoint documentation.</Callout>
+<Callout kind="warning">Read `error` defensively: it is a **string** on most responses and an **object** on some. `typeof err.error === 'string' ? err.error : err.error.message` covers both.</Callout>
 
 ## HTTP Status Codes
 
@@ -42,7 +55,7 @@ Flameup uses standard HTTP status codes:
 
 ### Authentication Errors
 
-<Callout kind="info">Authentication and rate-limit failures use the flat response shape (`{"error": ..., "message": ...}`), not the typed `error.type` envelope.</Callout>
+<Callout kind="info">Authentication and rate-limit failures use the flat response shape (`{"error": ..., "message": ...}`), not the typed `error.code` envelope.</Callout>
 
 <ExpandableGroup>
   <Expandable title="Unauthorized" default-open="true">
@@ -87,17 +100,17 @@ Flameup uses standard HTTP status codes:
   <Expandable title="NOT_FOUND" default-open="true">
     **HTTP Status:** 404
 
-    The requested resource doesn't exist. All not-found cases (including an unknown workspace) return this type.
+    The requested resource doesn't exist. On the people, events and device
+    surfaces this is flat:
 
     ```json
-    {
-      "success": false,
-      "error": {
-        "type": "NOT_FOUND",
-        "message": "Person with ID 'xyz' not found"
-      },
-      "request_id": "req_abc123"
-    }
+    { "error": "Person not found" }
+    ```
+
+    Workspace and campaign management endpoints return the typed form instead:
+
+    ```json
+    { "success": false, "error": { "code": "NOT_FOUND", "message": "..." } }
     ```
 
     **Solutions:**
@@ -107,16 +120,23 @@ Flameup uses standard HTTP status codes:
   <Expandable title="RESOURCE_CONFLICT" default-open="false">
     **HTTP Status:** 409
 
-    Resource already exists (for unique constraints).
+    Resource already exists (for unique constraints). On the people surface
+    this is flat:
+
+    ```json
+    { "error": "Person with this userId or email already exists" }
+    ```
+
+    The typed form below comes from the workspace and onboarding endpoints,
+    which is the only surface that emits `RESOURCE_CONFLICT`:
 
     ```json
     {
       "success": false,
       "error": {
-        "type": "RESOURCE_CONFLICT",
-        "message": "Person with email 'user@example.com' already exists"
-      },
-      "request_id": "req_abc123"
+        "code": "RESOURCE_CONFLICT",
+        "message": "A workspace with this name already exists"
+      }
     }
     ```
 
@@ -133,10 +153,9 @@ Flameup uses standard HTTP status codes:
     {
       "success": false,
       "error": {
-        "type": "DUPLICATE_KEY",
+        "code": "DUPLICATE_KEY",
         "message": "Duplicate key"
-      },
-      "request_id": "req_abc123"
+      }
     }
     ```
 
@@ -158,11 +177,10 @@ Flameup uses standard HTTP status codes:
     {
       "success": false,
       "error": {
-        "type": "VALIDATION_ERROR",
+        "code": "VALIDATION_ERROR",
         "message": "Validation failed",
         "details": "email: Invalid email format"
-      },
-      "request_id": "req_abc123"
+      }
     }
     ```
 
@@ -292,11 +310,14 @@ def fetch_with_retry(url, options, max_retries=3):
 Log errors with context for debugging:
 
 ```javascript
+// `error` is the response body's `error` field, which is a string on most
+// surfaces and an object on the workspace and campaign endpoints.
 function logError(error, context) {
+  const e = typeof error === 'string' ? { message: error } : (error || {});
   console.error('Flameup API Error', {
-    type: error.type,
-    message: error.message,
-    details: error.details,
+    code: e.code,
+    message: e.message,
+    details: e.details,
     context: {
       endpoint: context.endpoint,
       method: context.method,
@@ -321,8 +342,8 @@ const ERROR_MESSAGES = {
   default: 'Something went wrong. Please try again.'
 };
 
-function getUserMessage(errorType) {
-  return ERROR_MESSAGES[errorType] || ERROR_MESSAGES.default;
+function getUserMessage(errorCode) {
+  return ERROR_MESSAGES[errorCode] || ERROR_MESSAGES.default;
 }
 ```
 
@@ -334,4 +355,4 @@ function getUserMessage(errorType) {
 2. **Verify API key permissions** - Most 403 errors are permission issues
 3. **Validate request format** - Use the API reference for correct schemas
 4. **Check rate limit headers** - Monitor `X-RateLimit-*` headers (returned on `429` responses)
-5. **Include the request ID** - Provide the `request_id` from error responses when contacting support
+5. **Include the full response** - Paste the status code and body when contacting support

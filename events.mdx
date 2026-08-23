@@ -7,7 +7,7 @@ description: Track user behavior and actions with the Flameup Events API
 
 The Events API allows you to track user actions and behaviors in your application. Events power analytics, trigger campaigns, and help you understand how users interact with your product.
 
-<Callout kind="info">**Required Permission**: `events:write` for all Events API endpoints, including GET requests.</Callout>
+<Callout kind="info">**Permissions**: writes (`/track`, `/track/batch`) need `events:write`; reads (`/people/{external_id}/events`, `/events/search`) need `events:read`. `/identify` is a people write — see that section.</Callout>
 
 ## Event Object
 
@@ -37,6 +37,50 @@ These are the fields accepted in a track request body:
 | `external_id` | string | Yes | Your identifier for the user. Also accepted as `userId` or `user_id` |
 | `parameters` | object | No | Additional data about the event. Also accepted as `properties` |
 | `timestamp` | timestamp | No | When the event occurred (defaults to now) |
+
+## Identify a Person
+
+Create or update one person and their traits. This is the other half of
+ingestion: `/identify` says **who someone is**, `/track` says **what they did**.
+
+**Endpoint:** `POST /api/v1/identify`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `userId` | string | Yes | Your own user id. `external_id` and `user_id` are accepted aliases |
+| `email` | string | No | |
+| `phone` | string | No | |
+| `traits` | object | No | Merged with existing traits; new values win |
+| `timestamp` | datetime | No | Defaults to now |
+
+```bash
+curl -X POST https://api.flameup.ai/api/v1/identify \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userId": "user_12345",
+    "email": "jane@example.com",
+    "traits": { "plan": "premium", "exam": "RPSC" }
+  }'
+```
+
+Send **one** identifier per request. If you send more than one of `userId`,
+`external_id` or `user_id` and they disagree, the request is rejected rather
+than one being chosen for you.
+
+### Permissions
+
+`people:write`, or the narrower **`people:identify`** — which authorizes this
+route and nothing else. That narrowness is what makes it safe on a key shipped
+inside an app.
+
+### What comes back
+
+```json
+{ "success": true, "person": { "id": "…", "workspace_id": "…", "userId": "user_12345" } }
+```
+
+<Callout kind="info">The `person` object is **trimmed to those three fields** for any key without `people:read`. A write-scoped key cannot use identify to read a person back — send an id you do not own and you learn nothing about it.</Callout>
 
 ## Track an Event
 
@@ -328,6 +372,26 @@ curl "https://api.flameup.ai/api/v1/people/{external_id}/events?limit=100" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
+
+## Search Events by Type
+
+Find recent events of one type across the whole workspace, rather than for a
+single person.
+
+**Endpoint:** `GET /api/v1/events/search`
+
+| Parameter | Required | Description |
+|---|---|---|
+| `event` | Yes | The event name to search for |
+| `since` | No | Only events at or after this time (RFC 3339) |
+| `limit` | No | Default 50 |
+
+```bash
+curl "https://api.flameup.ai/api/v1/events/search?event=purchase_completed&since=2026-01-01T00:00:00Z" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+Requires `events:read`.
 
 ## Common Event Examples
 

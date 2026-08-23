@@ -89,7 +89,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
   -d '{
-    "person_id": "550e8400-e29b-41d4-a716-446655440000",
+    "external_id": "user_12345",
     "title": "Order Confirmed!",
     "body": "Your order #ORD-12345 has been confirmed. Total: $99.99",
     "action_url": "myapp://orders/ORD-12345",
@@ -105,7 +105,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | `external_id` | string | Yes | Your own user id — the same `userId` you send to `/identify` and `/track`. Not the Flameup person UUID |
 | `title` | string | Yes | Notification title |
 | `body` | string | Yes | Notification body text |
-| `platform` | string | No | Target platform: `ios`, `android`, or `all` (default). Web coming soon. |
+| `platform` | string | No | Target platform: `ios`, `android`, `web`, or `all` (default). |
 | `image_url` | string | No | URL for rich notification image |
 | `action_url` | string | No | Deep link URL when notification is tapped |
 | `priority` | string | No | Delivery priority: `low`, `normal`, `high` |
@@ -124,8 +124,8 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `android_channel_id` | string | Notification channel ID |
-| `android_icon` | string | Notification icon resource name |
+| `android_channel_id` | string | A notification channel **in your app**. Omit it and Android uses your app's default |
+| `android_icon` | string | A drawable name **in your app**. Omit it — Android then uses your app's own notification icon, which is almost always what you want |
 | `android_color` | string | Icon color (e.g., `#FF0000`) |
 | `android_sound` | string | Notification sound |
 
@@ -149,6 +149,79 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | `provider` | Push provider used (`fcm`) |
 | `provider_id` | External message ID from provider |
 | `error` | Error message (only if failed) |
+
+<Callout kind="warning">Do not set `android_icon` unless your app really ships a drawable by that exact name. The value overrides your app's configured default, and a name it does not have means the notification silently fails to display while this call still reports success.</Callout>
+
+---
+
+## Check delivery
+
+Sending returns `"status": "sent"`, which means FCM accepted the message — not
+that it reached the handset. To find out what happened:
+
+**Endpoint:** `GET /api/v1/workspaces/{workspace_id}/push/status/{message_id}`
+
+```bash
+curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/push/status/{message_id}" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+Requires `push:read`.
+
+## Send to many people at once
+
+**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send/batch`
+
+Up to **1000 recipients** in one request. Each recipient carries its own device
+token and optional per-recipient template variables.
+
+```json
+{
+  "title": "Your order shipped",
+  "body": "Hi {{name}}, it's on its way",
+  "recipients": [
+    { "user_id": "user_123", "device_token": "…", "platform": "android",
+      "variables": { "name": "Jane" } }
+  ]
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `title`, `body` | Yes | |
+| `recipients` | Yes | 1–1000 items |
+| `recipients[].device_token` | Yes | This route addresses devices directly, not people |
+| `recipients[].platform` | Yes | `ios`, `android` or `web` |
+| `recipients[].user_id` | No | Your own user id, for attribution. Note this route uses `user_id`, unlike the single-send route which takes `external_id` |
+| `recipients[].variables` | No | Template variables for that recipient |
+| `variables` | No | Defaults applied where a recipient sets none |
+| `image_url`, `action_url`, `tags` | No | |
+
+Requires `push:send`.
+
+## History and analytics
+
+| Endpoint | Returns |
+|---|---|
+| `GET .../push/notifications` | Recent notifications for the workspace |
+| `GET .../push/notifications/{id}` | One notification in full |
+| `GET .../push/analytics` | Delivery and engagement aggregates |
+| `GET .../push/metrics` | Operational counters |
+
+All require `push:read`.
+
+## Managing dead tokens
+
+Device tokens expire and get revoked. These let you deal with that rather than
+sending into the void:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST .../push/tokens/validate` | Check a `device_token` + `platform` before relying on it |
+| `POST .../push/tokens/suppress` | Stop sending to a token, with a reason |
+| `DELETE .../push/tokens/suppress/{id}` | Lift a suppression |
+
+All require `push:send`.
 
 ---
 
