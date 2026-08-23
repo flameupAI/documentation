@@ -124,8 +124,8 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `android_channel_id` | string | Notification channel ID |
-| `android_icon` | string | Notification icon resource name |
+| `android_channel_id` | string | A notification channel **in your app**. Omit it and Android uses your app's default |
+| `android_icon` | string | A drawable name **in your app**. Omit it — Android then uses your app's own notification icon, which is almost always what you want |
 | `android_color` | string | Icon color (e.g., `#FF0000`) |
 | `android_sound` | string | Notification sound |
 
@@ -149,6 +149,75 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | `provider` | Push provider used (`fcm`) |
 | `provider_id` | External message ID from provider |
 | `error` | Error message (only if failed) |
+
+<Callout kind="warning">Do not set `android_icon` unless your app really ships a drawable by that exact name. The value overrides your app's configured default, and a name it does not have means the notification silently fails to display while this call still reports success.</Callout>
+
+---
+
+## Check delivery
+
+Sending returns `"status": "sent"`, which means FCM accepted the message — not
+that it reached the handset. To find out what happened:
+
+**Endpoint:** `GET /api/v1/workspaces/{workspace_id}/push/status/{message_id}`
+
+```bash
+curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/push/status/{message_id}" \
+  -H "Authorization: Bearer ws_live_..."
+```
+
+Requires `push:read`.
+
+## Send to many people at once
+
+**Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send/batch`
+
+Up to **1000 recipients** in one request. Each recipient carries its own device
+token and optional per-recipient template variables.
+
+```json
+{
+  "title": "Your order shipped",
+  "body": "Hi {{name}}, it's on its way",
+  "recipients": [
+    { "user_id": "user_123", "device_token": "…", "platform": "android",
+      "variables": { "name": "Jane" } }
+  ]
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `title`, `body` | Yes | |
+| `recipients` | Yes | 1–1000 items; each needs `device_token` and `platform` |
+| `variables` | No | Defaults applied to every recipient |
+| `image_url`, `action_url`, `tags` | No | |
+
+Requires `push:send`.
+
+## History and analytics
+
+| Endpoint | Returns |
+|---|---|
+| `GET .../push/notifications` | Recent notifications for the workspace |
+| `GET .../push/notifications/{id}` | One notification in full |
+| `GET .../push/analytics` | Delivery and engagement aggregates |
+| `GET .../push/metrics` | Operational counters |
+
+All require `push:read`.
+
+## Managing dead tokens
+
+Device tokens expire and get revoked. These let you deal with that rather than
+sending into the void:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST .../push/tokens/validate` | Check a `device_token` + `platform` before relying on it |
+| `POST .../push/tokens/suppress` | Stop sending to a token, with a reason |
+| `DELETE .../push/tokens/suppress/{id}` | Lift a suppression |
+
+All require `push:send`.
 
 ---
 

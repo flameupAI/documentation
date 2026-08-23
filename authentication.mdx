@@ -81,6 +81,29 @@ curl -X GET "https://api.flameup.ai/api/v1/people" \
 ```
 </CodeGroup>
 
+## What an API key can reach
+
+An API key reaches the ingestion and messaging surfaces. Everything else in
+Flameup is built in the dashboard and authenticated with your dashboard session,
+not a key.
+
+**With an API key:**
+
+| Surface | Routes |
+|---|---|
+| Ingestion | `POST /identify`, `/track`, `/track/batch` |
+| People | `GET`/`POST`/`PUT`/`DELETE /people`, `/people/{id}`, `/people/search`, `/people/upsert`, `/people/batch` |
+| Events | `GET /people/{id}/events`, `GET /events/search` |
+| Devices | `POST`/`DELETE`/`GET /people/{id}/devices` |
+| Push | `POST .../push/send`, `/send/batch`, token validate and suppress, `GET .../push/status`, `/notifications`, `/analytics`, `/metrics` |
+| Campaigns | `POST /campaigns/{id}/trigger` — starting one, not authoring it |
+
+**Dashboard only — an API key will not work:** workflows, segments, message
+templates, schedules, campaign create/edit/delete, messaging channel setup, team
+and workspace management.
+
+<Callout kind="info">If a call returns `403` and the permission looks right, check this list first — the likeliest cause is that the route is a dashboard one and no key can reach it.</Callout>
+
 ## Permissions
 
 API keys have granular permissions that control access to different resources:
