@@ -166,7 +166,7 @@ requests.post(f'{BASE_URL}/track', headers=headers, json={
 curl -X POST https://api.flameup.ai/api/v1/identify \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
   -H 'Content-Type: application/json' \
-  -d '{"userId":"user_123","email":"jane@example.com","traits":{"plan":"premium"}}'
+  -d '{"userId":"user_123","email":"jane@example.com","traits":{"first_name":"Jane","plan":"premium"}}'
 
 curl -X POST https://api.flameup.ai/api/v1/track \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \

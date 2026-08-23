@@ -91,10 +91,10 @@ not a key.
 
 | Surface | Routes |
 |---|---|
-| Ingestion | `POST /identify`, `/track`, `/track/batch` |
+| Ingestion | `POST /identify` (`people:write` or `people:identify`), `/track`, `/track/batch` (`events:write`) |
 | People | `GET`/`POST`/`PUT`/`DELETE /people`, `/people/{id}`, `/people/search`, `/people/upsert`, `/people/batch` |
-| Events | `GET /people/{id}/events`, `GET /events/search` |
-| Devices | `POST`/`DELETE`/`GET /people/{id}/devices` |
+| Events | `GET /people/{external_id}/events`, `GET /events/search` |
+| Devices | `POST`/`DELETE`/`GET /people/{external_id}/devices` |
 | Push | `POST .../push/send`, `/send/batch`, token validate and suppress, `GET .../push/status`, `/notifications`, `/analytics`, `/metrics` |
 | Campaigns | `POST /campaigns/{id}/trigger` — starting one, not authoring it |
 

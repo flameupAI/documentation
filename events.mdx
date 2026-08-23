@@ -7,7 +7,7 @@ description: Track user behavior and actions with the Flameup Events API
 
 The Events API allows you to track user actions and behaviors in your application. Events power analytics, trigger campaigns, and help you understand how users interact with your product.
 
-<Callout kind="info">**Required Permission**: `events:write` for all Events API endpoints, including GET requests.</Callout>
+<Callout kind="info">**Permissions**: writes (`/track`, `/track/batch`) need `events:write`; reads (`/people/{id}/events`, `/events/search`) need `events:read`. `/identify` is a people write — see that section.</Callout>
 
 ## Event Object
 

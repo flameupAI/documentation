@@ -189,8 +189,12 @@ token and optional per-recipient template variables.
 | Field | Required | Notes |
 |---|---|---|
 | `title`, `body` | Yes | |
-| `recipients` | Yes | 1–1000 items; each needs `device_token` and `platform` |
-| `variables` | No | Defaults applied to every recipient |
+| `recipients` | Yes | 1–1000 items |
+| `recipients[].device_token` | Yes | This route addresses devices directly, not people |
+| `recipients[].platform` | Yes | `ios`, `android` or `web` |
+| `recipients[].user_id` | No | Your own user id, for attribution. Note this route uses `user_id`, unlike the single-send route which takes `external_id` |
+| `recipients[].variables` | No | Template variables for that recipient |
+| `variables` | No | Defaults applied where a recipient sets none |
 | `image_url`, `action_url`, `tags` | No | |
 
 Requires `push:send`.

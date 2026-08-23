@@ -8,8 +8,10 @@ description: Understanding Flameup API rate limits and quotas
 Rate limits are applied in **scopes**. Which scope a request falls into depends
 on the route and how the request is authenticated — not on a single global pool.
 
-The two that matter for an API-key integration are **ingestion** and **reads**,
-and both are generous: 12,000 writes a minute for a whole workspace.
+The two that matter for an API-key integration are **ingestion** at
+12,000/min and **reads** at 1,200/min, both counted per workspace. Writes are
+deliberately the generous one: reads are a tenth of that, so a polling loop
+will hit its ceiling long before an event firehose does.
 
 ## Limits
 
@@ -42,13 +44,17 @@ Rate limit headers are returned **only on `429 Too Many Requests` responses** �
 X-RateLimit-Limit: 12000
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1705320660
+X-RateLimit-Scope: ws-ingest
+Retry-After: 37
 ```
 
 | Header | Description |
 |--------|-------------|
+| `Retry-After` | Seconds to wait. **This is the one to honour** — the `X-RateLimit-*` trio is convention, `Retry-After` is the standard clients and proxies already understand. Capped at 3600. |
 | `X-RateLimit-Limit` | The per-minute limit of the scope you hit |
 | `X-RateLimit-Remaining` | Always `0` — the header is only sent on a 429 |
 | `X-RateLimit-Reset` | Unix timestamp when the window resets |
+| `X-RateLimit-Scope` | Which budget was exhausted, e.g. `ws-ingest`, `edge`. Lets you tell "my workspace is over quota" from "the shared backstop is shedding load". |
 
 <Callout kind="tip">Because the headers only appear on a `429`, you cannot use them to pace yourself in advance. Back off when you see one rather than trying to track a budget.</Callout>
 
@@ -59,107 +65,57 @@ When you exceed the rate limit, you'll receive a `429 Too Many Requests` respons
 ```json
 {
   "error": "Rate limit exceeded",
-  "message": "Too many requests. Please try again later."
+  "message": "Too many requests. Please try again later.",
+  "scope": "ws-ingest",
+  "gate": "local"
 }
 ```
 
-The response headers will contain timing information for when you can retry.
+`scope` names the budget you exhausted, matching `X-RateLimit-Scope`. `gate` is
+`local` when your own limit was hit and `shared` when the process-wide backstop
+was shedding load. Quote both if you contact support.
 
 ### Implementing Backoff
 
+The headers only appear on a `429`, so there is nothing to pace against in
+advance. React to the rejection instead:
+
 <CodeGroup>
 ```javascript
-class FlameupClient {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
-    this.rateLimitRemaining = 1000;
-    this.rateLimitReset = null;
+async function request(url, options = {}, attempt = 0) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { Authorization: `Bearer ${API_KEY}`, ...options.headers }
+  });
+
+  if (response.status === 429 && attempt < 5) {
+    // Retry-After is in seconds and is the header to trust.
+    const retryAfter = parseInt(response.headers.get('Retry-After') || '0');
+    const wait = (retryAfter || 2 ** attempt) * 1000;
+    await new Promise(r => setTimeout(r, wait));
+    return request(url, options, attempt + 1);
   }
 
-  async request(endpoint, options = {}) {
-    // Check if we should wait
-    if (this.rateLimitRemaining <= 0 && this.rateLimitReset) {
-      const waitTime = this.rateLimitReset - Date.now();
-      if (waitTime > 0) {
-        await this.sleep(waitTime);
-      }
-    }
-
-    const response = await fetch(endpoint, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        ...options.headers
-      }
-    });
-
-    // Update rate limit tracking
-    this.rateLimitRemaining = parseInt(
-      response.headers.get('X-RateLimit-Remaining') || '1000'
-    );
-    this.rateLimitReset = parseInt(
-      response.headers.get('X-RateLimit-Reset') || '0'
-    ) * 1000;
-
-    if (response.status === 429) {
-      // Use X-RateLimit-Reset header or default wait time
-      const resetTime = parseInt(response.headers.get('X-RateLimit-Reset') || '0') * 1000;
-      const waitTime = resetTime > Date.now() ? resetTime - Date.now() : 60000;
-      await this.sleep(waitTime);
-      return this.request(endpoint, options); // Retry
-    }
-
-    return response;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  return response;
 }
 ```
 
 ```python
-import time
-import requests
+import time, requests
 
-class FlameupClient:
-    def __init__(self, api_key):
-        self.api_key = api_key
-        self.rate_limit_remaining = 1000
-        self.rate_limit_reset = None
+def request(url, attempt=0, **kwargs):
+    r = requests.request(headers={'Authorization': f'Bearer {API_KEY}'},
+                         url=url, **kwargs)
 
-    def request(self, endpoint, method='GET', **kwargs):
-        # Check if we should wait
-        if self.rate_limit_remaining <= 0 and self.rate_limit_reset:
-            wait_time = self.rate_limit_reset - time.time()
-            if wait_time > 0:
-                time.sleep(wait_time)
+    if r.status_code == 429 and attempt < 5:
+        retry_after = int(r.headers.get('Retry-After', 0))
+        time.sleep(retry_after or 2 ** attempt)
+        return request(url, attempt + 1, **kwargs)
 
-        headers = kwargs.pop('headers', {})
-        headers['Authorization'] = f'Bearer {self.api_key}'
-
-        response = requests.request(
-            method, endpoint, headers=headers, **kwargs
-        )
-
-        # Update rate limit tracking
-        self.rate_limit_remaining = int(
-            response.headers.get('X-RateLimit-Remaining', 1000)
-        )
-        self.rate_limit_reset = int(
-            response.headers.get('X-RateLimit-Reset', 0)
-        )
-
-        if response.status_code == 429:
-            # Use X-RateLimit-Reset header or default wait time
-            reset_time = int(response.headers.get('X-RateLimit-Reset', 0))
-            wait_time = max(reset_time - time.time(), 60) if reset_time else 60
-            time.sleep(wait_time)
-            return self.request(endpoint, method, **kwargs)  # Retry
-
-        return response
+    return r
 ```
 </CodeGroup>
+
 
 ## Best Practices
 

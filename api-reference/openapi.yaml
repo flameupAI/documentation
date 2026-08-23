@@ -254,29 +254,39 @@ paths:
       tags:
         - People
       summary: Search people
-      description: Search for people by specific criteria.
+      description: >-
+        Search people in the workspace. Requires `people:read`.
       operationId: searchPeople
       parameters:
         - name: q
           in: query
-          description: General search query
+          description: >-
+            Search text, matched against the person's identifiers and contact
+            fields. `search` is accepted as an alias; `q` wins if both are sent.
           schema:
             type: string
-        - name: email
+        - name: search
           in: query
-          description: Exact email match
+          description: Alias for `q`.
           schema:
             type: string
-        - name: external_id
+        - name: status
           in: query
-          description: Exact external_id match
+          description: Restrict to one lifecycle status.
           schema:
             type: string
+            example: active
         - name: limit
           in: query
           schema:
             type: integer
-            default: 10
+            default: 50
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
       responses:
         '200':
           description: Search results
@@ -289,6 +299,15 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Person'
+                  total:
+                    type: integer
+                    description: Total matches, not the size of this page.
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /workspaces/{workspaceId}/people/stats:
     description: >-
@@ -414,6 +433,10 @@ paths:
                         type: array
                         items:
                           type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /identify:
     post:
@@ -449,7 +472,7 @@ paths:
                   success:
                     type: boolean
                   person:
-                    $ref: '#/components/schemas/Person'
+                    $ref: '#/components/schemas/IdentifiedPerson'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -908,23 +931,43 @@ paths:
               $ref: '#/components/schemas/TransactionalRequest'
       responses:
         '200':
-          description: Message sent
+          description: >-
+            Accepted by the provider. `status` reports the provider handoff, not
+            delivery to the handset.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  success:
-                    type: boolean
                   message_id:
                     type: string
-                  delivered_to:
-                    type: array
-                    items:
-                      type: string
-                      enum: [ios, android, web]
-                  devices_count:
-                    type: integer
+                    description: Use with the push status route to check delivery.
+                    example: 9f2c1e77-4a1b-4c2e-9a0f-51a6b2d3c8e4
+                  status:
+                    type: string
+                    example: sent
+                  sent_at:
+                    type: string
+                    format: date-time
+                  provider:
+                    type: string
+                    example: fcm
+                  provider_id:
+                    type: string
+                    description: The provider's own message identifier.
+                  error:
+                    type: string
+                    description: Present only when the provider rejected the send.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No person in this workspace has that `external_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   securitySchemes:
@@ -1019,6 +1062,24 @@ components:
           type: string
           format: date-time
 
+    IdentifiedPerson:
+      type: object
+      description: >-
+        What `/identify` returns. A key holding `people:read` gets the full
+        `Person`; every other key — including a `pk_live_` key with
+        `people:identify` — gets these three fields only, so identify cannot be
+        turned into a person-read.
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          description: The identifier you sent.
+
     CreatePersonRequest:
       type: object
       required:
@@ -1053,6 +1114,10 @@ components:
 
     IdentifyRequest:
       type: object
+      anyOf:
+        - required: [userId]
+        - required: [external_id]
+        - required: [user_id]
       properties:
         userId:
           type: string
@@ -1087,37 +1152,52 @@ components:
 
     Event:
       type: object
+      description: >-
+        Note the field is `type` on the way out, though you send it as `event`
+        on the way in.
       properties:
         id:
           type: string
-        workspace_id:
+        type:
           type: string
+          description: The event name.
+          example: purchase_completed
         person_id:
           type: string
           format: uuid
-        event:
-          type: string
+          description: >-
+            Returned by `/events/search` only. The per-person routes omit it,
+            since the person is already in the path.
         parameters:
           type: object
-        timestamp:
-          type: string
-          format: date-time
+          additionalProperties: true
         created_at:
           type: string
           format: date-time
 
     TrackEventRequest:
       type: object
+      description: >-
+        `event` is required, plus exactly one identifier. `external_id`,
+        `userId` and `user_id` are equal aliases for the same field — send
+        whichever your client already has. Sending two that disagree is
+        rejected rather than resolved by precedence.
       required:
-        - external_id
         - event
+      anyOf:
+        - required: [external_id]
+        - required: [userId]
+        - required: [user_id]
       properties:
         external_id:
           type: string
-          description: User identifier (external_id or email)
+          description: Your own identifier for the person, as sent to `/identify`.
         userId:
           type: string
-          description: Deprecated alias for external_id
+          description: Alias for `external_id`.
+        user_id:
+          type: string
+          description: Alias for `external_id`.
         event:
           type: string
           description: Event name
