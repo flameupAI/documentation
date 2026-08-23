@@ -1,376 +1,183 @@
 ---
 title: Quick Start
-description: Get up and running with Flameup in 5 minutes
+description: From nothing to a verified event in ten minutes
 ---
 
-## Quick Start Guide
+## Quick Start
 
-This guide will walk you through integrating Flameup into your application. By the end, you'll be able to identify users, track events, and send your first message.
+Three calls and a check. By the end you will have a person in your workspace, an
+event attached to them, and proof it arrived.
 
-<Callout kind="info">**Prerequisites**: You'll need a Flameup account and an API key. Sign up at [app.flameup.ai](https://app.flameup.ai) if you haven't already.</Callout>
+<Callout kind="info">**Prerequisites**: a Flameup account. Sign up at [app.flameup.ai](https://app.flameup.ai) if you have not already.</Callout>
 
-## Step 1: Get Your API Key
+## Step 1: Create an API key
 
 <Steps>
-  <Step title="Log into Dashboard" icon="user">
-    Go to [app.flameup.ai](https://app.flameup.ai) and log in to your account.
+  <Step title="Open API Keys" icon="key">
+    In the dashboard, go to **Settings → API Keys** and click **Create API Key**.
   </Step>
-  <Step title="Navigate to API Keys" icon="key">
-    Go to **Settings** > **API Keys** in the sidebar.
+  <Step title="Say where the key will be used" icon="server">
+    Choose **On my server** for this guide, and tick `events:write`,
+    `people:write` and `events:read`.
+
+    If you are integrating a mobile app or a website instead, choose **In my app
+    or website** — there is nothing to tick, and the key you get is safe to ship
+    in your bundle.
   </Step>
-  <Step title="Create a New Key" icon="plus">
-    Click **Create API Key**, give it a name like "My App - Development", and grant the following permissions:
-    - `people:read`
-    - `people:write`
-    - `events:read`
-    - `events:write`
-  </Step>
-  <Step title="Copy Your Key" icon="copy">
-    Copy the API key and save it securely. It follows the format `ws_live_{workspace}_{random}.{secret}`
+  <Step title="Copy it now" icon="copy">
+    The key is shown once. It looks like
+    `ws_live_abc12345_abc123.a1b2c3…` — the part before the dot identifies it,
+    the part after is the secret.
   </Step>
 </Steps>
 
-## Step 2: Identify a User
+<Callout kind="warning">Keys carry a `live` or `test` label, but **the label does not separate your data** — both write to the same workspace. There is no sandbox today, so treat anything you send as real.</Callout>
 
-When a user signs up or logs in, identify them to Flameup. This creates or updates their profile.
+The workspace is derived from the key, so it never appears in a URL or a body.
+
+## Step 2: Identify a person
+
+`POST /identify` creates or updates one person, keyed on **your own** user id —
+whatever your database already calls them.
 
 <CodeGroup>
 ```javascript
 const API_KEY = 'ws_live_abc12345_abc123.your_secret_here';
-const WORKSPACE_ID = 'your_workspace_id';
+const BASE_URL = 'https://api.flameup.ai/api/v1';
 
-async function identifyUser(userId, email, traits) {
-  const response = await fetch(
-    `https://api.flameup.ai/api/v1/people`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        userId: userId,
-        email: email,
-        traits: traits
-      })
-    }
-  );
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${API_KEY}`
+};
 
-  return response.json();
-}
-
-// Example usage
-const user = await identifyUser(
-  'user_12345',
-  'sarah@example.com',
-  {
-    first_name: 'Sarah',
-    last_name: 'Connor',
-    plan: 'premium',
-    signup_date: '2024-01-15'
-  }
-);
-
-console.log('User identified:', user.id);
+await fetch(`${BASE_URL}/identify`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    userId: 'user_12345',
+    email: 'jane@example.com',
+    traits: { first_name: 'Jane', plan: 'premium' }
+  })
+});
 ```
 
 ```python
 import requests
 
 API_KEY = 'ws_live_abc12345_abc123.your_secret_here'
-WORKSPACE_ID = 'your_workspace_id'
+BASE_URL = 'https://api.flameup.ai/api/v1'
+headers = {'Authorization': f'Bearer {API_KEY}'}
 
-def identify_user(user_id, email, traits):
-    response = requests.post(
-        f'https://api.flameup.ai/api/v1/people',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {API_KEY}'
-        },
-        json={
-            'userId': user_id,
-            'email': email,
-            'traits': traits
-        }
-    )
-    return response.json()
-
-# Example usage
-user = identify_user(
-    'user_12345',
-    'sarah@example.com',
-    {
-        'first_name': 'Sarah',
-        'last_name': 'Connor',
-        'plan': 'premium',
-        'signup_date': '2024-01-15'
-    }
-)
-
-print(f"User identified: {user['id']}")
+requests.post(f'{BASE_URL}/identify', headers=headers, json={
+    'userId': 'user_12345',
+    'email': 'jane@example.com',
+    'traits': {'first_name': 'Jane', 'plan': 'premium'}
+})
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/people" \
-  -H "Content-Type: application/json" \
+curl -X POST https://api.flameup.ai/api/v1/identify \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
+  -H 'Content-Type: application/json' \
   -d '{
     "userId": "user_12345",
-    "email": "sarah@example.com",
-    "traits": {
-      "first_name": "Sarah",
-      "last_name": "Connor",
-      "plan": "premium",
-      "signup_date": "2024-01-15"
-    }
+    "email": "jane@example.com",
+    "traits": { "first_name": "Jane", "plan": "premium" }
   }'
 ```
 </CodeGroup>
 
-<Callout kind="tip">The `userId` is your unique identifier for this user. It can be a database ID, username, or any stable identifier in your system.</Callout>
+Traits are merged, not replaced — send only what changed. Call this again
+whenever a trait changes; journeys re-read traits at every decision point, so an
+updated trait re-routes a person mid-flight.
 
-## Step 3: Track an Event
+## Step 3: Track an event
 
-Track user actions to understand behavior and trigger campaigns.
+`POST /track` records something the person did. **This is what campaigns trigger
+on.**
 
 <CodeGroup>
 ```javascript
-async function trackEvent(externalId, eventName, parameters) {
-  const response = await fetch(
-    'https://api.flameup.ai/api/v1/track',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        external_id: externalId,
-        event: eventName,
-        parameters: parameters,
-        timestamp: new Date().toISOString()
-      })
-    }
-  );
-
-  return response.json();
-}
-
-// Track a purchase
-await trackEvent('user_12345', 'purchase_completed', {
-  order_id: 'order_789',
-  amount: 99.99,
-  currency: 'USD',
-  items: ['product_a', 'product_b']
+await fetch(`${BASE_URL}/track`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({
+    userId: 'user_12345',
+    event: 'purchase_completed',
+    parameters: { amount: 49.99, currency: 'USD', plan: 'premium' }
+  })
 });
-
-console.log('Event tracked!');
 ```
 
 ```python
-from datetime import datetime
-
-def track_event(external_id, event_name, parameters):
-    response = requests.post(
-        'https://api.flameup.ai/api/v1/track',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {API_KEY}'
-        },
-        json={
-            'external_id': external_id,
-            'event': event_name,
-            'parameters': parameters,
-            'timestamp': datetime.utcnow().isoformat() + 'Z'
-        }
-    )
-    return response.json()
-
-# Track a purchase
-track_event('user_12345', 'purchase_completed', {
-    'order_id': 'order_789',
-    'amount': 99.99,
-    'currency': 'USD',
-    'items': ['product_a', 'product_b']
+requests.post(f'{BASE_URL}/track', headers=headers, json={
+    'userId': 'user_12345',
+    'event': 'purchase_completed',
+    'parameters': {'amount': 49.99, 'currency': 'USD', 'plan': 'premium'}
 })
-
-print('Event tracked!')
 ```
 
 ```bash
-curl -X POST "https://api.flameup.ai/api/v1/track" \
-  -H "Content-Type: application/json" \
+curl -X POST https://api.flameup.ai/api/v1/track \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here" \
+  -H 'Content-Type: application/json' \
   -d '{
-    "external_id": "user_12345",
+    "userId": "user_12345",
     "event": "purchase_completed",
-    "parameters": {
-      "order_id": "order_789",
-      "amount": 99.99,
-      "currency": "USD",
-      "items": ["product_a", "product_b"]
-    },
-    "timestamp": "2024-01-15T10:30:00Z"
+    "parameters": { "amount": 49.99, "currency": "USD" }
   }'
 ```
 </CodeGroup>
 
-## Step 4: Register a Device (Optional)
+<Callout kind="tip">You do not have to identify someone before tracking them. `/track` creates the person if the id is new, and says `"person_created": true` when it did — which is how you catch a mistyped identifier rather than discovering it weeks later.</Callout>
 
-If your app uses push notifications, register the device token:
+Campaign triggers match the event name **exactly**, so pick names you are willing
+to keep. `object_action` in snake_case is the usual convention:
+`purchase_completed`, `trial_started`.
 
-<Callout kind="warning">Device registration requires `devices:register` or `devices:write`. The dashboard's key editor does not offer a Devices category yet, so a key created in the UI will get `403 Insufficient permissions` here — create a key with one of those scopes through the API keys endpoint, or skip ahead to Step 5.</Callout>
+## Step 4: Check it arrived
 
-<CodeGroup>
-```javascript
-async function registerDevice(externalId, token, platform) {
-  const response = await fetch(
-    `https://api.flameup.ai/api/v1/people/${externalId}/devices`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        token: token,
-        platform: platform, // 'ios' or 'android' ('web' coming soon)
-        device_name: 'iPhone 15 Pro',
-        app_version: '2.1.0'
-      })
-    }
-  );
-
-  return response.json();
-}
-
-// Register an iOS device (externalId is your own user id — no Flameup UUID needed)
-await registerDevice(
-  'person_abc123',
-  'fcm_device_token_here',
-  'ios'
-);
-```
-
-```python
-def register_device(external_id, token, platform):
-    response = requests.post(
-        f'https://api.flameup.ai/api/v1/people/{external_id}/devices',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {API_KEY}'
-        },
-        json={
-            'token': token,
-            'platform': platform,  # 'ios' or 'android' ('web' coming soon)
-            'device_name': 'iPhone 15 Pro',
-            'app_version': '2.1.0'
-        }
-    )
-    return response.json()
-
-# Register an iOS device (external_id is your own user id — no Flameup UUID needed)
-register_device(
-    'person_abc123',
-    'fcm_device_token_here',
-    'ios'
-)
-```
-</CodeGroup>
-
-## Step 5: Send a Push Notification
-
-Send a push notification to a user (e.g., order confirmation):
-
-<CodeGroup>
-```javascript
-async function sendPush(externalId, title, body, options = {}) {
-  const response = await fetch(
-    `https://api.flameup.ai/api/v1/workspaces/${WORKSPACE_ID}/push/send`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        external_id: externalId,
-        title: title,
-        body: body,
-        ...options
-      })
-    }
-  );
-
-  return response.json();
-}
-
-// Send order confirmation (externalId is your own user id — the same one you identified with)
-await sendPush('person_abc123',
-  'Order Confirmed!',
-  'Your order #order_789 is confirmed. Total: $99.99',
-  { action_url: 'myapp://orders/order_789' }
-);
-```
-
-```python
-def send_push(external_id, title, body, **options):
-    response = requests.post(
-        f'https://api.flameup.ai/api/v1/workspaces/{WORKSPACE_ID}/push/send',
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {API_KEY}'
-        },
-        json={
-            'external_id': external_id,
-            'title': title,
-            'body': body,
-            **options
-        }
-    )
-    return response.json()
-
-# Send order confirmation (external_id is your own user id from Step 2)
-send_push('person_abc123',
-    'Order Confirmed!',
-    'Your order #order_789 is confirmed. Total: $99.99',
-    action_url='myapp://orders/order_789'
-)
-```
-</CodeGroup>
-
-<Callout kind="info">The Push API takes your own user id (`external_id`) — the same one you identified with. It no longer requires the Flameup person UUID, so there is no lookup step.</Callout>
-
-## Verification
-
-Check that everything is working:
-
-1. **Dashboard**: Log into [app.flameup.ai](https://app.flameup.ai) and check the People section - you should see your test user.
-
-2. **API**: Fetch the user you just created:
+Read the events back for that person:
 
 ```bash
-curl "https://api.flameup.ai/api/v1/people/user_12345" \
+curl "https://api.flameup.ai/api/v1/people/user_12345/events" \
   -H "Authorization: Bearer ws_live_abc12345_abc123.your_secret_here"
 ```
 
-<Callout kind="info">Fetch a person by the `userId` you assigned when identifying them (the external user ID from Step 2), not the Flameup `person_id`.</Callout>
+```json
+{
+  "success": true,
+  "person_id": "7881c966-ab64-4c36-adc9-3fa0359c0e9a",
+  "events": [
+    {
+      "id": "80c2a0d3-dd72-4fde-9dfc-c0b76dd3e42d",
+      "type": "purchase_completed",
+      "parameters": { "amount": 49.99, "currency": "USD" },
+      "created_at": "2026-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+```
 
-## What's Next?
+You can also open **People** in the dashboard and find `user_12345` there.
+
+<Callout kind="warning">A `403` here means the key is missing `events:read` — the read scope is separate from the write one on purpose. Add it in Settings → API Keys.</Callout>
+
+## What's next
 
 <Columns cols={2}>
+  <Card title="Send push notifications" icon="bell" href="devices">
+    Register a device token, then send. Needs your FCM credentials uploaded in
+    **Settings → Messaging Channels → Push** first.
+  </Card>
+  <Card title="Track from your app" icon="smartphone" href="sdks">
+    A copy-paste Flutter client, plus Node and Python examples.
+  </Card>
   <Card title="People API" icon="users" href="people">
-    Learn about user management, batch operations, and search.
+    Read, search, update and batch-upsert people.
   </Card>
-  <Card title="Events API" icon="activity" href="events">
-    Track custom events and query event history.
-  </Card>
-  <Card title="Campaigns" icon="send" href="campaigns">
-    Set up automated campaigns triggered by user behavior.
-  </Card>
-  <Card title="API Reference" icon="code" href="api-reference">
-    Explore the complete API documentation.
+  <Card title="Trigger campaigns" icon="send" href="campaigns">
+    Campaigns are built in the dashboard; the API starts them.
   </Card>
 </Columns>
-
-<Callout kind="warning">Keys carry a `live` or `test` label, but **the label does not separate your data** — both write to the same workspace. There is no sandbox today, so treat anything you send as real.</Callout>
