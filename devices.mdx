@@ -172,7 +172,9 @@ Register a device token to enable push notifications for a user.
 
     ```javascript
     // PUBLIC_KEY is a pk_live_ key with devices:register. It ships to the
-    // browser; that is expected, and why it cannot hold any other scope.
+    // browser; that is expected. A public key is limited to the append-only
+    // scopes — events:write, devices:register, people:identify — and can never
+    // hold a read scope.
     async function registerWebDevice(externalId, fcmToken) {
       const response = await fetch(
         `https://api.flameup.ai/api/v1/people/${externalId}/devices`,
@@ -481,7 +483,7 @@ FCM tokens can change. Handle token refresh in your app:
     // person, using the helper from the registration tab above.
     navigator.serviceWorker.addEventListener('message', async (event) => {
       if (event.data.type === 'TOKEN_REFRESH') {
-        const newToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+        const newToken = await getToken(messaging, { vapidKey: 'your-vapid-key' });
         await registerWebDevice(externalId, newToken);
       }
     });
