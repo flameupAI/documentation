@@ -9,6 +9,34 @@ Stay up to date with the latest changes to Flameup.
 
 ---
 
+<Update label="2026-08-26" description="Multi-event triggers, first occurrence, count conditions" tags={["breaking", "campaigns"]}>
+## Breaking: event triggers name a list of events
+
+`trigger_config.event_name` (one string) is now `event_names` (an array —
+**any** listed event fires the campaign). Existing campaigns were migrated in
+place; a config still sending the singular key is rejected with
+`event_name was replaced by event_names` rather than silently accepted, since
+the trigger lookup only matches the array.
+
+Also in this release:
+
+- **`first_occurrence`** (trigger option) — fire only the first time your
+  workspace has ever seen the event for a person. Implies once-only entry and
+  cannot be combined with `max_per_user > 1`.
+- **Count-based conditions** — event-history conditions gain
+  `performed_count_gte / _lte / _eq / _between`, with bounds in the condition
+  value (`count`, `count_max`). "The 4th or 5th time" no longer needs a
+  client-side counter on the event.
+- **Unknown filter operators now fail closed** and are rejected at campaign
+  activation, instead of matching everything.
+- **`max_per_user` is enforced by the database** — concurrent duplicate
+  events can no longer double-enroll a person.
+- **Segment DELETE returns 409** with the blocking campaign names when the
+  segment is still in use (previously a bare 500).
+- **Template namespaces unified** — `{{user.traits.x}}` and
+  `{{user.properties.x}}` both read the `/identify` attribute bag.
+</Update>
+
 <Update label="2026-08-21" description="Device and push routes key on your own user id" tags={["breaking", "api"]}>
 ## Breaking: `external_id` replaces the person UUID
 
