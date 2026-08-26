@@ -46,7 +46,7 @@ Flameup uses standard HTTP status codes:
 | `401` | Unauthorized | Missing or invalid API key |
 | `403` | Forbidden | Insufficient permissions |
 | `404` | Not Found | Resource doesn't exist |
-| `409` | Conflict | Resource already exists |
+| `409` | Conflict | Resource already exists, or a delete is blocked by references (e.g. deleting a segment still used by campaigns returns 409 naming them) |
 | `429` | Too Many Requests | Rate limit exceeded |
 | `500` | Internal Server Error | Server-side error |
 | `503` | Service Unavailable | Temporary unavailability |

@@ -13,7 +13,11 @@ Campaigns are automated messaging workflows that send push notifications to your
 
 When you build a campaign in the dashboard, you choose one of four trigger types:
 
-- **Event** — starts when a user performs a specific action (for example, a signup or purchase).
+- **Event** — starts when a user performs any of the trigger's listed events
+  (for example, one purchase campaign listening on both a PhonePe and a QR
+  payment event). An optional *first occurrence* mode fires only the first
+  time Flameup has ever seen the event for that person — useful for treating
+  a first login as a signup.
 - **Webhook** — started by calling the trigger endpoint below. Ideal for backend-initiated notifications and third-party integrations.
 - **Schedule** — runs at defined times (for example, a weekly digest).
 - **Dynamic Schedule** — sends relative to a per-user date (for example, a trial-expiration reminder).
