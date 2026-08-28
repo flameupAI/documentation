@@ -17,9 +17,9 @@ will hit its ceiling long before an event firehose does.
 
 | Scope | Limit | Burst | Counted per | Applies to |
 |---|---|---|---|---|
-| Ingestion | **12,000/min** | 2,000 | Workspace | `/track`, `/track/batch`, `/identify`, people writes |
+| Ingestion | **12,000/min** | 2,000 | Workspace | `/track`, `/track/batch`, `/identify`, people writes, **push sends** (`/push/send`, `/push/send/batch`, token validation) |
 | Device registration | **6,000/min** | 1,000 | Workspace | `/people/{id}/devices` register and unregister |
-| Reads | **1,200/min** | 300 | Workspace | People and device reads, campaign triggers, push |
+| Reads | **1,200/min** | 300 | Workspace | People, device and event reads, campaign triggers, push reads |
 | Dashboard | **1,200/min** | 300 | User | Firebase-authenticated dashboard sessions |
 | Unauthenticated | **120/min** | 60 | IP | Public routes, e.g. invitation lookup |
 | Provider webhooks | **600/min** | 300 | IP | Inbound FCM / APNs / email / SMS callbacks |
@@ -54,7 +54,7 @@ Retry-After: 37
 | `X-RateLimit-Limit` | The per-minute limit of the scope you hit |
 | `X-RateLimit-Remaining` | Always `0` — the header is only sent on a 429 |
 | `X-RateLimit-Reset` | Unix timestamp when the window resets |
-| `X-RateLimit-Scope` | Which budget was exhausted, e.g. `ws-ingest`, `edge`. Lets you tell "my workspace is over quota" from "the shared backstop is shedding load". |
+| `X-RateLimit-Scope` | Which budget was exhausted. A `ws-*` scope means your workspace's budget; `edge` means the per-IP backstop under everything. |
 
 <Callout kind="tip">Because the headers only appear on a `429`, you cannot use them to pace yourself in advance. Back off when you see one rather than trying to track a budget.</Callout>
 
@@ -71,9 +71,13 @@ When you exceed the rate limit, you'll receive a `429 Too Many Requests` respons
 }
 ```
 
-`scope` names the budget you exhausted, matching `X-RateLimit-Scope`. `gate` is
-`local` when your own limit was hit and `shared` when the process-wide backstop
-was shedding load. Quote both if you contact support.
+`scope` names the budget you exhausted, matching `X-RateLimit-Scope` — that is
+the field that tells you *whose* budget it was (`ws-ingest` is your workspace;
+`edge` is the per-IP backstop). `gate` says *which enforcement layer* of that
+same budget rejected you: `local` is the replica's own token bucket, `shared`
+is the cross-replica counter that coordinates the identical budget between
+replicas. Both gates mean the same thing for you — back off. Quote both fields
+if you contact support.
 
 ### Implementing Backoff
 
@@ -137,7 +141,7 @@ def request(method, url, attempt=0, **kwargs):
     await flare.batchUpsertPeople(users);
     ```
 
-    Batch endpoints let you do more work per request, which helps you stay within the per-IP limit.
+    Batch endpoints let you do more work per request, which helps you stay within your workspace's per-minute budget.
   </Expandable>
   <Expandable title="Log the scope you are hitting" default-open="false">
     You cannot pace against a budget — the headers arrive only with the

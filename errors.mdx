@@ -15,7 +15,9 @@ ingestion, people and device surfaces:
 }
 ```
 
-Some responses add a `message` alongside it with more detail.
+Some responses add a `message` alongside it with more detail, and the
+ingestion routes (`/track`, `/identify`) add `"success": false` and a
+`details` string to their flat errors.
 
 A minority of endpoints — mainly workspace and campaign management — return a
 typed envelope instead:
@@ -31,7 +33,7 @@ typed envelope instead:
 }
 ```
 
-<Callout kind="warning">Read `error` defensively: it is a **string** on most responses and an **object** on some. `typeof err.error === 'string' ? err.error : err.error.message` covers both.</Callout>
+<Callout kind="warning">Read `error` defensively: it is a **string** on most responses and an **object** on some. `typeof err.error === 'string' ? err.error : err.error.message` covers both. (The typed envelope is itself not perfectly uniform — some variants omit `success` — which is one more reason to key on `error` rather than on `success`.)</Callout>
 
 ## HTTP Status Codes
 
@@ -49,6 +51,7 @@ Flameup uses standard HTTP status codes:
 | `409` | Conflict | Resource already exists, or a delete is blocked by references (e.g. deleting a segment still used by campaigns returns 409 naming them) |
 | `429` | Too Many Requests | Rate limit exceeded |
 | `500` | Internal Server Error | Server-side error |
+| `501` | Not Implemented | The route exists but is not built yet (e.g. push delivery-history reads). Returns `{"error": "not implemented"}` — not worth retrying |
 | `503` | Service Unavailable | Temporary unavailability |
 
 ## Common Error Codes
@@ -100,12 +103,15 @@ Flameup uses standard HTTP status codes:
   <Expandable title="NOT_FOUND" default-open="true">
     **HTTP Status:** 404
 
-    The requested resource doesn't exist. On the people, events and device
-    surfaces this is flat:
+    The requested resource doesn't exist. On the people, events, device and
+    push surfaces this is flat, with a surface-specific string — the push
+    surface says `"Person not found"`, the people surface says:
 
     ```json
-    { "error": "Person not found" }
+    { "error": "person with id 'user_12345' not found" }
     ```
+
+    Match on the status code, not the string.
 
     Workspace and campaign management endpoints return the typed form instead:
 
@@ -121,10 +127,10 @@ Flameup uses standard HTTP status codes:
     **HTTP Status:** 409
 
     Resource already exists (for unique constraints). On the people surface
-    this is flat:
+    this is flat, with the error chain as the string:
 
     ```json
-    { "error": "Person with this userId or email already exists" }
+    { "error": "conflict with person: Person with this userId or email already exists" }
     ```
 
     The typed form below comes from the workspace and onboarding endpoints,
