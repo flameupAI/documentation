@@ -227,6 +227,10 @@ that recipient's send errored (bad UUID, provider failure):
 }
 ```
 
+One trap in the summary: `summary.sent` counts every non-`failed` result —
+`skipped` and `policy_suppressed` recipients count as "sent" there. To know
+who actually got a push, walk `results` and count `status === "sent"`.
+
 ## Validating tokens
 
 **Endpoint:** `POST .../push/tokens/validate` (requires `push:send`)
