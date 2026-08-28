@@ -43,12 +43,15 @@ paths:
       tags:
         - People
       summary: List people
-      description: Retrieve a paginated list of people in the workspace.
+      description: >-
+        Retrieve a paginated list of people in the workspace. `limit` and
+        `offset` are the only query parameters — there is no status or search
+        filtering here; use `GET /people/search` for that.
       operationId: listPeople
       parameters:
         - name: limit
           in: query
-          description: Number of results (max 100)
+          description: Number of results (max 500)
           schema:
             type: integer
             default: 50
@@ -59,17 +62,6 @@ paths:
           schema:
             type: integer
             default: 0
-        - name: status
-          in: query
-          description: Filter by status
-          schema:
-            type: string
-            enum: [active, unsubscribed, bounced]
-        - name: search
-          in: query
-          description: Search by name or email
-          schema:
-            type: string
       responses:
         '200':
           description: Successful response
@@ -94,21 +86,29 @@ paths:
       tags:
         - People
       summary: Create person
-      description: Create a new person profile.
+      description: >-
+        Create or update a person profile. This route binds the same body as
+        `/identify` and shares its upsert semantics — an existing `userId` is
+        updated, not duplicated.
       operationId: createPerson
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreatePersonRequest'
+              $ref: '#/components/schemas/IdentifyRequest'
       responses:
         '201':
-          description: Person created
+          description: >-
+            Person created or updated. Trimmed to `id`, `workspace_id` and
+            `userId` for any key without `people:read` — same rule as
+            `/identify`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Person'
+                anyOf:
+                  - $ref: '#/components/schemas/IdentifiedPerson'
+                  - $ref: '#/components/schemas/Person'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -119,13 +119,16 @@ paths:
       tags:
         - People
       summary: Get person
-      description: Retrieve a person by ID.
+      description: Retrieve a person by external ID.
       operationId: getPerson
       parameters:
         - name: id
           in: path
           required: true
-          description: External ID or email
+          description: >-
+            The person's external ID — the `userId` you send to /identify and
+            /track. Email is NOT accepted here; the lookup keys on external ID
+            only.
           schema:
             type: string
       responses:
@@ -141,13 +144,18 @@ paths:
       tags:
         - People
       summary: Update person
-      description: Update a person's attributes.
+      description: >-
+        Merge traits into a person's profile. Returns a confirmation message,
+        not the updated person — read it back with `GET /people/{id}` if you
+        need the merged record.
       operationId: updatePerson
       parameters:
         - name: id
           in: path
           required: true
-          description: External ID or email
+          description: >-
+            The person's external ID — the `userId` you send to /identify and
+            /track. Email is NOT accepted here.
           schema:
             type: string
       requestBody:
@@ -162,7 +170,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Person'
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Person updated successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
     delete:
@@ -175,12 +189,22 @@ paths:
         - name: id
           in: path
           required: true
-          description: External ID or email
+          description: >-
+            The person's external ID — the `userId` you send to /identify and
+            /track. Email is NOT accepted here.
           schema:
             type: string
       responses:
-        '204':
+        '200':
           description: Person deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Person deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -189,27 +213,33 @@ paths:
       tags:
         - People
       summary: Upsert person
-      description: Create or update a person based on external_id or email.
+      description: >-
+        Create or update a person, keyed on the identifier you send
+        (`userId`/`external_id`/`user_id`). Email is never used as the key.
+        This is the same code path as `POST /people`; there is no
+        `was_created` flag in the response.
       operationId: upsertPerson
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreatePersonRequest'
+              $ref: '#/components/schemas/IdentifyRequest'
       responses:
-        '200':
-          description: Person upserted
+        '201':
+          description: >-
+            Person created or updated. Trimmed to `id`, `workspace_id` and
+            `userId` for any key without `people:read`.
           content:
             application/json:
               schema:
-                allOf:
+                anyOf:
+                  - $ref: '#/components/schemas/IdentifiedPerson'
                   - $ref: '#/components/schemas/Person'
-                  - type: object
-                    properties:
-                      was_created:
-                        type: boolean
-                        description: True if person was created, false if updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /people/batch:
     post:
@@ -218,7 +248,10 @@ paths:
       summary: Batch upsert people
       description: >-
         Create or update multiple people in one request. The `identify` array
-        holds up to 1000 operations.
+        holds up to 1000 operations; the request body is capped at 1 MB. This
+        endpoint accepts identify operations only — a body carrying a `track`
+        array is rejected with 400 (send those to `POST /track/batch`, which is
+        gated by the right permission).
       operationId: batchUpsertPeople
       requestBody:
         required: true
@@ -233,10 +266,13 @@ paths:
                   type: array
                   maxItems: 1000
                   items:
-                    $ref: '#/components/schemas/CreatePersonRequest'
+                    $ref: '#/components/schemas/IdentifyRequest'
       responses:
         '200':
-          description: Batch completed
+          description: >-
+            Batch processed. Per-item failures come back INSIDE this 200 —
+            check every result's `success`, not just the HTTP status. The
+            person record is under each result's `data`, not at the top level.
           content:
             application/json:
               schema:
@@ -245,9 +281,26 @@ paths:
                   results:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Person'
+                      $ref: '#/components/schemas/BatchOperationResult'
                   total:
                     type: integer
+                    description: Number of results (equals the number of operations sent).
+        '400':
+          description: >-
+            More than 1000 operations, a `track` array in the body, or invalid
+            JSON.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: Request body exceeds the 1 MB batch limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /people/search:
     get:
@@ -683,8 +736,15 @@ paths:
       summary: Register device
       description: |
         Register a device token for push notifications. The workspace is resolved from
-        the API key, and the person is identified by the UUID in the path — neither
-        belongs in the request body.
+        the API key, and the person is identified by the **external ID** in the path —
+        the same `userId` you send to /identify and /track. Neither belongs in the
+        request body.
+
+        An unknown external ID does not 404: the person is **created** on the spot and
+        the device is registered against them, with `person_created: true` in the
+        response. Do not 404-guard this call for new users — a genuine miss cannot
+        happen. Like `POST /track`, seeing `person_created` on an identifier you
+        believed established points at a typo, not a new user.
 
         Re-posting the same token updates the existing device record rather than
         creating a duplicate; use this to refresh `app_version` or `os_version`.
@@ -715,12 +775,20 @@ paths:
                     format: uuid
                   message:
                     type: string
+                  person_created:
+                    type: boolean
+                    description: >-
+                      Present and true only when this registration created the
+                      person. Absent when the person was already known.
         '400':
           description: Validation failed — check `token` length and `platform`
         '403':
           description: API key lacks `devices:register`/`devices:write`, or the person belongs to another workspace
         '404':
-          description: Person not found
+          description: >-
+            Effectively unreachable for real identifiers — an unknown external
+            ID creates the person instead. Returned only for an identifier that
+            names nobody at all (e.g. all-whitespace).
         '409':
           description: Cannot register a device for an inactive person
 
@@ -784,7 +852,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [draft, active, paused, completed]
+            enum: [draft, active, paused, archived, completed, scheduled, failed]
         - name: trigger_type
           in: query
           schema:
@@ -888,29 +956,45 @@ paths:
         - Campaigns
       summary: Trigger campaign
       description: >-
-        Manually trigger a campaign for its configured audience. This route is
-        workspace-agnostic — the workspace comes from the API key, so it must NOT
-        be included in the path. Requires the `campaigns:trigger` permission.
+        Trigger a webhook campaign for its configured audience. The campaign id
+        is workspace-agnostic in the path, but the body's `workspace_id` is
+        required and must match the API key's workspace. Requires the
+        `campaigns:trigger` permission.
+
+
+        Only campaigns with `trigger_type: webhook` in `active` status can be
+        triggered this way — anything else is a 400. The audience comes from
+        the campaign's own configuration; you cannot pass user ids or filters
+        here.
       operationId: triggerCampaign
       parameters:
         - $ref: '#/components/parameters/CampaignId'
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
+              required:
+                - workspace_id
               properties:
-                user_ids:
-                  type: array
-                  items:
-                    type: string
-                filters:
+                workspace_id:
+                  type: string
+                  description: >-
+                    Must equal the workspace the API key belongs to; any other
+                    value is a 403.
+                trigger_data:
                   type: object
-                data:
-                  type: object
+                  additionalProperties: true
+                  description: >-
+                    Optional context data passed into the workflow execution
+                    for this trigger.
       responses:
-        '200':
-          description: Campaign triggered
+        '202':
+          description: >-
+            Accepted — the audience is being processed. `people_queued` is the
+            number of people matched; it can be 0 (still a 202, with a message
+            saying nobody matched).
           content:
             application/json:
               schema:
@@ -918,8 +1002,44 @@ paths:
                 properties:
                   success:
                     type: boolean
-                  recipients_count:
+                  campaign_id:
+                    type: string
+                  people_queued:
                     type: integer
+                    description: Number of people in the campaign's audience.
+                  status:
+                    type: string
+                    enum: [processing, completed]
+                  triggered_at:
+                    type: string
+                    format: date-time
+                  message:
+                    type: string
+        '400':
+          description: >-
+            The campaign's trigger type is not `webhook`, the campaign is not
+            `active`, or `workspace_id` is missing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: >-
+            `workspace_id` does not match the API key's workspace, or the key
+            lacks `campaigns:trigger`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: >-
+            Campaign not found. Also returned for a campaign that exists in
+            another workspace — deliberately indistinguishable from a missing
+            one, so campaign ids cannot be enumerated across tenants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /workspaces/{workspaceId}/push/send:
     post:
@@ -929,7 +1049,15 @@ paths:
       description: >-
         Send a one-off push notification to a user. Unlike most API-key routes, this
         one IS workspace-scoped, and the workspace in the path must match the one the
-        API key belongs to.
+        API key belongs to. Requires `push:send` (never grantable on a public key).
+
+
+        The workspace **send policy applies**: quiet hours, the daily cap
+        (`max_pushes_per_day`) and the rolling-window cap
+        (`max_pushes_per_window` per `window_hours`) each return **200** with
+        `status: policy_suppressed` rather than an error — an order
+        confirmation can be silently held by quiet hours, so check `status`,
+        not just the HTTP code.
       operationId: sendTransactionalPush
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
@@ -942,32 +1070,14 @@ paths:
       responses:
         '200':
           description: >-
-            Accepted by the provider. `status` reports the provider handoff, not
-            delivery to the handset.
+            The send was processed — which includes sends that did NOT reach
+            the provider. `status: sent` reports the provider handoff, not
+            delivery to the handset; `skipped` and `policy_suppressed` also
+            arrive as 200.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message_id:
-                    type: string
-                    description: Use with the push status route to check delivery.
-                    example: 9f2c1e77-4a1b-4c2e-9a0f-51a6b2d3c8e4
-                  status:
-                    type: string
-                    example: sent
-                  sent_at:
-                    type: string
-                    format: date-time
-                  provider:
-                    type: string
-                    example: fcm
-                  provider_id:
-                    type: string
-                    description: The provider's own message identifier.
-                  error:
-                    type: string
-                    description: Present only when the provider rejected the send.
+                $ref: '#/components/schemas/SendPushResult'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -978,6 +1088,232 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /workspaces/{workspaceId}/push/send/batch:
+    post:
+      tags:
+        - Transactional
+      summary: Send push to multiple recipients
+      description: >-
+        Send one title/body to up to 1000 recipients. Requires `push:send`.
+
+
+        Recipient semantics: `user_id` must be the **Flameup person UUID**
+        (not an external id — a non-UUID value fails that recipient), and
+        `device_token` acts as a **selector among that person's active
+        devices**, not a raw address — a token that is not one of the person's
+        active devices yields `status: skipped`, never a send to an
+        unregistered device. Content renders against the named person, with
+        `variables` merged per recipient (recipient values win).
+
+
+        Always 200: per-recipient failures come back as `status: failed`
+        entries in `results`, in request order. The workspace send policy
+        applies per recipient, as on the single-send route.
+      operationId: sendBatchPush
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body, recipients]
+              properties:
+                title:
+                  type: string
+                body:
+                  type: string
+                image_url:
+                  type: string
+                action_url:
+                  type: string
+                recipients:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [device_token, platform]
+                    properties:
+                      user_id:
+                        type: string
+                        format: uuid
+                        description: >-
+                          The Flameup person UUID. Effectively required — a
+                          recipient without a valid UUID fails.
+                      device_token:
+                        type: string
+                        description: >-
+                          Selects which of the person's active devices to send
+                          to. Must be one of their registered, active tokens.
+                      platform:
+                        type: string
+                        enum: [ios, android, web]
+                        description: >-
+                          Required by validation, but delivery always uses the
+                          platform the token was registered with.
+                      variables:
+                        type: object
+                        additionalProperties: true
+                        description: Per-recipient template variables; win over the top-level `variables`.
+                variables:
+                  type: object
+                  additionalProperties: true
+                  description: Template variables shared by all recipients.
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: >-
+            Batch processed. Inspect each result's `status` — failures are in
+            here, not in the HTTP code.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    description: One result per recipient, in request order.
+                    items:
+                      $ref: '#/components/schemas/SendPushResult'
+                  summary:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      sent:
+                        type: integer
+                      failed:
+                        type: integer
+                      processed:
+                        type: string
+                        format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /workspaces/{workspaceId}/push/status/{messageId}:
+    get:
+      tags:
+        - Transactional
+      summary: Get push status
+      description: >-
+        Look up a push notification by the `message_id` a send returned.
+        Requires `push:read` (never grantable on a public key).
+
+
+        Be honest with yourself about what this can tell you: FCM exposes no
+        delivery-status API, so for any record the workspace owns this endpoint
+        answers a **synthetic `status: sent`** with a fresh timestamp. It can
+        never tell you more than the send response already did — do not poll it
+        expecting `delivered` or `opened`.
+      operationId: getPushStatus
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: messageId
+          in: path
+          required: true
+          description: The `message_id` returned by a push send.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status record (synthetic — see the endpoint description).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                  status:
+                    type: string
+                    description: Always `sent` today — FCM has no status API.
+                    example: sent
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          example: sent
+                        timestamp:
+                          type: string
+                          format: date-time
+                        data:
+                          type: object
+                          additionalProperties: true
+                  last_updated:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: >-
+            Unknown `message_id` (the record lookup failure currently surfaces
+            as a 500, not a 404), or the provider could not be resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /workspaces/{workspaceId}/push/tokens/validate:
+    post:
+      tags:
+        - Transactional
+      summary: Validate a device token
+      description: >-
+        Format-only validation of a device token — iOS tokens must be 64 hex
+        characters, Android FCM tokens 140-200 characters, web push tokens at
+        least 100. It does NOT check the token against the provider, so a
+        well-formed but revoked token still validates. Requires `push:send`.
+      operationId: validateDeviceToken
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_token, platform]
+              properties:
+                device_token:
+                  type: string
+                platform:
+                  type: string
+                  enum: [ios, android, web]
+      responses:
+        '200':
+          description: >-
+            Validation verdict — an invalid token is still a 200, with
+            `valid: false` and the reason in `error`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  device_token:
+                    type: string
+                    description: Echoed back masked (first and last 4 characters).
+                  platform:
+                    type: string
+                  error:
+                    type: string
+                    description: Present only when `valid` is false.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
 components:
   securitySchemes:
@@ -1030,55 +1366,52 @@ components:
   schemas:
     Person:
       type: object
+      description: >-
+        The person shape every API-key People operation returns. Note the
+        mixed naming on the way out: `userId` (camelCase) and `traits`, never
+        `external_id` or `attributes`. There are no name, timezone, locale,
+        status or first/last-seen fields on this surface.
       properties:
         id:
           type: string
           format: uuid
+          description: The Flameup person UUID.
         workspace_id:
           type: string
-        external_id:
+          format: uuid
+        userId:
           type: string
+          description: >-
+            Your own user id — the external id you send to /identify and
+            /track.
         email:
           type: string
-          format: email
+          description: Empty string when the person has no email.
         phone:
           type: string
-        first_name:
+          description: Empty string when the person has no phone.
+        anonymousId:
           type: string
-        last_name:
-          type: string
-        avatar_url:
-          type: string
-          format: uri
-        timezone:
-          type: string
-        locale:
-          type: string
-        status:
-          type: string
-          enum: [active, unsubscribed, bounced]
-        attributes:
+          description: Present only when the person carries an anonymous id.
+        traits:
           type: object
+          additionalProperties: true
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-        first_seen_at:
-          type: string
-          format: date-time
-        last_seen_at:
-          type: string
-          format: date-time
 
     IdentifiedPerson:
       type: object
       description: >-
-        What `/identify` returns. A key holding `people:read` gets the full
-        `Person`; every other key — including a `pk_live_` key with
-        `people:identify` — gets these three fields only, so identify cannot be
-        turned into a person-read.
+        The trimmed person echo a write route returns to a key without
+        `people:read` — from `/identify`, `POST /people` and
+        `POST /people/upsert`. It carries only what the caller already knew
+        (the userId it just sent) plus the Flameup id needed to register a
+        device, so a write-only key cannot be turned into a person-read.
       properties:
         id:
           type: string
@@ -1089,38 +1422,6 @@ components:
         userId:
           type: string
           description: The identifier you sent.
-
-    CreatePersonRequest:
-      type: object
-      required:
-        - userId
-      properties:
-        userId:
-          type: string
-          description: Your unique identifier for this user
-        email:
-          type: string
-          format: email
-        phone:
-          type: string
-          description: User's phone number
-        traits:
-          type: object
-          description: User attributes
-          properties:
-            first_name:
-              type: string
-            last_name:
-              type: string
-            phone:
-              type: string
-            avatar_url:
-              type: string
-            timezone:
-              type: string
-            locale:
-              type: string
-          additionalProperties: true
 
     IdentifyRequest:
       type: object
@@ -1144,6 +1445,9 @@ components:
           format: email
         phone:
           type: string
+        anonymousId:
+          type: string
+          description: Anonymous id to merge into this person.
         traits:
           type: object
           additionalProperties: true
@@ -1154,11 +1458,33 @@ components:
 
     UpdatePersonRequest:
       type: object
+      required: [traits]
       properties:
         traits:
           type: object
           description: Attributes to update (merged with existing)
           additionalProperties: true
+
+    BatchOperationResult:
+      type: object
+      description: >-
+        One result per batch operation, in request order. A failed operation
+        does not fail the request — it comes back here with `success: false`.
+      properties:
+        type:
+          type: string
+          enum: [identify]
+          description: The operation type (this endpoint processes identify only).
+        index:
+          type: integer
+          description: Position of the operation in the request array.
+        success:
+          type: boolean
+        error:
+          type: string
+          description: Present only when `success` is false.
+        data:
+          $ref: '#/components/schemas/Person'
 
     Event:
       type: object
@@ -1287,8 +1613,6 @@ components:
             returned as `device_token` on the Device object. The person and
             workspace are taken from the path and the API key respectively, so
             `person_id` and `workspace_id` are not accepted here.
-          minLength: 10
-          maxLength: 4096
         platform:
           type: string
           description: Device platform
@@ -1313,12 +1637,20 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, active, paused, completed]
+          enum: [draft, active, paused, archived, completed, scheduled, failed]
         trigger_type:
           type: string
           enum: [event, webhook, schedule, dynamic_schedule]
         trigger_config:
-          type: object
+          description: >-
+            Shape depends on `trigger_type` — see EventTriggerConfig,
+            WebhookTriggerConfig and ScheduleTriggerConfig.
+            `dynamic_schedule` campaigns use a separate slot-schedule config
+            validated by its own service and are not modeled here.
+          anyOf:
+            - $ref: '#/components/schemas/EventTriggerConfig'
+            - $ref: '#/components/schemas/WebhookTriggerConfig'
+            - $ref: '#/components/schemas/ScheduleTriggerConfig'
         audience_config:
           type: object
         created_at:
@@ -1327,6 +1659,130 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    EventTriggerConfig:
+      type: object
+      description: >-
+        Trigger configuration for `trigger_type: event`. `event_names` may be
+        omitted at creation but is required to **activate** the campaign.
+
+
+        Two legacy keys are rejected, not ignored: the pre-2026-08-26 singular
+        `event_name` ("event_name was replaced by event_names"), and
+        `time_window` at activation (use `debounce`). Validation fails closed —
+        an unknown filter operator stops activation loudly, because the runtime
+        matcher would otherwise silently never fire.
+      properties:
+        event_names:
+          type: array
+          items:
+            type: string
+          description: >-
+            Event names that fire this campaign; a person enters on any of
+            them. Required at activation.
+        filters:
+          type: array
+          description: >-
+            Property filters as `{field, operator, value}` rows. Operators
+            (case-insensitive): eq/equals, neq/not_equals, gt, lt, contains.
+            Unknown operators are rejected at activation.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              operator:
+                type: string
+                enum: [eq, equals, neq, not_equals, gt, lt, contains]
+              value: {}
+        properties:
+          type: object
+          additionalProperties: true
+          description: Exact-match constraints on event properties.
+        debounce:
+          type: number
+          description: >-
+            Seconds, as a **number**. Duration strings are rejected — send
+            `300`, not `"5m"`.
+        delay_minutes:
+          type: number
+          description: Minutes to wait after the event before the person enters.
+        max_per_user:
+          type: integer
+          description: >-
+            Maximum times one person can enter this campaign. Enforced by a
+            database constraint, not just application code.
+        first_occurrence:
+          type: boolean
+          description: >-
+            Enter only on the first-ever occurrence of the event for a person.
+            Combining it with `max_per_user` greater than 1 is rejected at
+            activation as contradictory.
+      additionalProperties: true
+
+    WebhookTriggerConfig:
+      type: object
+      description: >-
+        Trigger configuration for `trigger_type: webhook` — the only type
+        `POST /campaigns/{campaignId}/trigger` accepts. Every field is
+        optional.
+      properties:
+        webhook_url:
+          type: string
+          format: uri
+          description: Must be HTTPS in production.
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        secret_key:
+          type: string
+          minLength: 16
+        validate_signature:
+          type: boolean
+        api_key:
+          type: string
+        required_fields:
+          type: array
+          items:
+            type: string
+        rate_limit:
+          type: number
+        filters:
+          description: >-
+            Either the canonical array of `{field, operator, value}` rows, or
+            the webhook-specific `{key: value}` object shape.
+          anyOf:
+            - type: array
+              items:
+                type: object
+            - type: object
+              additionalProperties: true
+      additionalProperties: true
+
+    ScheduleTriggerConfig:
+      type: object
+      description: 'Trigger configuration for `trigger_type: schedule`.'
+      required: [schedule_type]
+      properties:
+        schedule_type:
+          type: string
+          enum: [cron, one_time, immediate]
+        cron_expression:
+          type: string
+          description: >-
+            Required (or `recurring_rule`) when `schedule_type` is `cron`.
+        recurring_rule:
+          type: string
+        scheduled_at:
+          type: string
+          format: date-time
+          description: >-
+            Required when `schedule_type` is `one_time`. RFC 3339, and must be
+            in the future.
+        timezone:
+          type: string
+      additionalProperties: true
 
     CreateCampaignRequest:
       type: object
@@ -1340,7 +1796,16 @@ components:
           type: string
           enum: [event, webhook, schedule, dynamic_schedule]
         trigger_config:
-          type: object
+          description: >-
+            Shape depends on `trigger_type` — see EventTriggerConfig,
+            WebhookTriggerConfig and ScheduleTriggerConfig. Validation is
+            lenient at creation (per-type required fields are enforced at
+            activation), but known-bad keys such as `event_name` are rejected
+            immediately.
+          anyOf:
+            - $ref: '#/components/schemas/EventTriggerConfig'
+            - $ref: '#/components/schemas/WebhookTriggerConfig'
+            - $ref: '#/components/schemas/ScheduleTriggerConfig'
         messages:
           type: array
           items:
@@ -1365,13 +1830,30 @@ components:
         name:
           type: string
         trigger_config:
-          type: object
+          description: >-
+            Shape depends on the campaign's `trigger_type` — see
+            EventTriggerConfig, WebhookTriggerConfig and ScheduleTriggerConfig.
+            Activation-time rules apply when the update sets `status: active`.
+          anyOf:
+            - $ref: '#/components/schemas/EventTriggerConfig'
+            - $ref: '#/components/schemas/WebhookTriggerConfig'
+            - $ref: '#/components/schemas/ScheduleTriggerConfig'
         status:
           type: string
           enum: [draft, active, paused]
 
     TransactionalRequest:
       type: object
+      description: >-
+        Only the fields below reach the send pipeline. The legacy fields
+        `platform`, `priority`, `ttl`, `content_type`, `collapse_key`,
+        `workflow_id` and the per-platform options (`ios_badge`, `ios_sound`,
+        `ios_category`, `android_icon`, `android_channel_id`, `android_color`,
+        `android_sound`) are accepted without error but **silently dropped**:
+        the platform always comes from the device's stored registration, and
+        delivery uses fixed defaults (sound `default`, normal priority,
+        standard content). They are omitted here so a generated client cannot
+        promise what the API does not do.
       required: [external_id, title, body]
       properties:
         external_id:
@@ -1383,44 +1865,124 @@ components:
           type: string
         body:
           type: string
-        platform:
-          type: string
-          enum: [ios, android, web, all]
-          default: all
         image_url:
           type: string
         action_url:
           type: string
-        priority:
-          type: string
-          enum: [low, normal, high]
-        ttl:
-          type: integer
-          description: Seconds.
         custom_data:
           type: object
           additionalProperties: true
-        ios_badge:
-          type: integer
-        ios_sound:
+          description: >-
+            Rides the FCM message payload verbatim (reserved FCM keys are
+            stripped). String values render through the same template pipeline
+            as title/body.
+        variables:
+          type: object
+          additionalProperties: true
+          description: Template variables for rendering title/body/custom_data.
+        event_id:
           type: string
-        ios_category:
+          description: Optional event id to attribute this send to.
+        campaign_id:
           type: string
-        android_icon:
+          description: Optional campaign id to attribute this send to.
+        scheduled_at:
+          type: string
+          format: date-time
+          description: Schedule the send for a future time.
+        tags:
+          type: array
+          items:
+            type: string
+
+    SendPushResult:
+      type: object
+      properties:
+        message_id:
           type: string
           description: >-
-            A drawable name in YOUR app. Omit it and Android uses the app's own
-            default notification icon, which is almost always what you want.
-        android_channel_id:
+            Use with the push status route. For `skipped` results this is a
+            synthetic `skipped-<unix>` value; `policy_suppressed` results
+            reference a real (suppressed) record.
+          example: 9f2c1e77-4a1b-4c2e-9a0f-51a6b2d3c8e4
+        status:
           type: string
-          description: A notification channel in your app. Omit to use its default.
-        android_color:
+          enum: [sent, skipped, policy_suppressed, failed]
+          description: >-
+            `sent` — handed to the provider (not proof of delivery).
+            `skipped` — nothing was sent and nothing is retried: the person
+            has no active device tokens, the requested token is not one of
+            their active devices, or the token is suppressed; the reason is in
+            `error`. `policy_suppressed` — the workspace send policy (quiet
+            hours, daily cap, or the rolling-window cap) blocked the send.
+            `failed` — batch responses only; the single-send route reports
+            provider failures as HTTP 500 instead.
+        sent_at:
           type: string
-        android_sound:
+          format: date-time
+        provider:
           type: string
+          description: '`fcm`, or `none` for skipped results.'
+          example: fcm
+        provider_id:
+          type: string
+          description: The provider's own message identifier.
+        error:
+          type: string
+          description: >-
+            Present on non-`sent` results — the skip or suppression reason,
+            or the failure message.
 
     Error:
+      description: >-
+        Flameup has no single error envelope; the layer that rejects the
+        request decides the shape. Handler-level errors on the API-key surface
+        are a flat `{"error": "<string>"}`, occasionally with `success: false`
+        and a `code`. The auth middleware's 401/403 responses carry three flat
+        string fields: `{"error": "Unauthorized" | "Forbidden", "message":
+        ..., "details": ...}`. Dashboard-session surfaces use a typed
+        `{"error": {"code", "message", "details"}}` object. Parse defensively:
+        `error` may be a string or an object.
+      anyOf:
+        - $ref: '#/components/schemas/FlatError'
+        - $ref: '#/components/schemas/AuthError'
+        - $ref: '#/components/schemas/TypedError'
+
+    FlatError:
       type: object
+      description: >-
+        The API-key surface's handler errors: a flat string under `error`.
+      required: [error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Person not found
+        code:
+          type: string
+
+    AuthError:
+      type: object
+      description: >-
+        The auth middleware's 401/403 shape — three flat strings at the top
+        level.
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          example: Unauthorized
+        message:
+          type: string
+          example: Invalid or expired API key
+        details:
+          type: string
+          example: 'Please provide a valid API key in the Authorization header: Bearer <your_api_key>'
+
+    TypedError:
+      type: object
+      description: The typed envelope used by dashboard-session surfaces.
       properties:
         success:
           type: boolean
