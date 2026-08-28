@@ -9,6 +9,33 @@ Stay up to date with the latest changes to Flameup.
 
 ---
 
+<Update label="2026-08-28" description="Rolling-window push cap + send-policy validation" tags={["messaging", "workspace"]}>
+## Send policy: rolling-window cap, validated on write
+
+The workspace send policy (`settings.send_policy`) gains a **rolling-window
+frequency cap** alongside the existing daily cap and quiet hours:
+
+- **`max_pushes_per_window`** + **`window_hours`** — at most N pushes per user
+  in any sliding window of 1–168 hours, counted in absolute time (no calendar
+  or timezone reset, unlike the daily cap's local-midnight boundary). The two
+  fields are set together — both `> 0` to enable, both `0` to disable.
+- A send blocked by it returns the same `200` with
+  `"status": "policy_suppressed"` as the other rules, on transactional sends
+  and journey pushes alike.
+- A journey push node's `bypass_frequency_cap` skips **both** frequency caps —
+  daily and rolling. Quiet hours remain unbypassable by anything.
+
+The workspace-settings write path now **validates `send_policy`** instead of
+storing whatever arrives: `PUT /workspaces/{id}` rejects a malformed policy
+with `400 INVALID_SEND_POLICY` — quiet-hours times must be `HH:MM`, a
+non-empty `timezone` must be a real IANA name (empty means UTC), caps must be
+`>= 0`, `window_hours` must be within 0–168, and the window pair must be set
+both-or-neither. Previously a bad policy was silently stored and then failed
+open at send time.
+</Update>
+
+---
+
 <Update label="2026-08-26" description="Multi-event triggers, first occurrence, count conditions" tags={["breaking", "campaigns"]}>
 ## Breaking: event triggers name a list of events
 
@@ -97,8 +124,11 @@ create or edit them.
 
 ### Messaging APIs
 - Push notifications via FCM (iOS, Android and Web)
-- Platform-specific options per platform
-- Batch push, delivery status, and token suppression
+- Batch push sending
+
+(This entry originally also claimed delivery-status reads and token
+suppression; those endpoints exist but are not implemented — see
+[Transactional Push](/transactional) for what actually works today.)
 
 Email and SMS are sent through campaigns and the dashboard, not through an API
 key.

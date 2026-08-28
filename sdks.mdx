@@ -10,8 +10,9 @@ pub.dev, CocoaPods or Maven. Integration is plain HTTPS against
 `https://api.flameup.ai/api/v1`, which needs nothing beyond an HTTP client you
 already have.
 
-What follows are thin, dependency-light clients you can copy into your codebase
-and edit. They are examples, not a supported library — you own the copy.
+What follows are thin, dependency-light JavaScript and Python clients you can
+copy into your codebase and edit, plus the call-level recipe for Flutter. They
+are examples, not a supported library — you own the copy.
 
 ## REST API
 
@@ -280,7 +281,13 @@ asyncio.run(main())
 
 ### Flutter (Dart)
 
-<Callout kind="warning">There is no published `flameup_flutter` package. Flutter integration is a small file you copy into your app and edit, built on plain HTTPS plus `firebase_messaging`. The API surface below mirrors Firebase Analytics deliberately, so it sits alongside the analytics wrappers most apps already have.</Callout>
+<Callout kind="warning">There is no published `flameup_flutter` package, and no
+Dart file to download from these docs yet. A ready-made single-file client
+(built on plain HTTPS plus `firebase_messaging`, with a Firebase-Analytics-like
+surface) exists and is **available from Flameup on request** while publication
+is pending — contact support@flameup.ai. Until then, the section below is the
+integration contract itself: the four HTTP calls a Flutter app makes, which any
+Dart developer can wire with the `http` package in an afternoon.</Callout>
 
 **Dependencies:**
 
@@ -294,55 +301,28 @@ dependencies:
 
 Android also needs `android/app/google-services.json` from your Firebase project.
 
-#### Setup
+#### The calls a Flutter app makes
 
-```dart
-await FlameUp.initialize(FlameUpOptions(
-  publicKey: const String.fromEnvironment('FLAMEUP_PUBLIC_KEY'),
-  eventNamePrefix: 'tl_',
-  enabled: true,
-));
-```
+Authenticate every call with your `pk_live_` public key
+(`Authorization: Bearer ...`). All identifiers are **your own user id** — the
+same value your backend sends to `/identify`; there is no Flameup UUID to
+fetch, cache, or pass around.
 
-| Option | Type | Default | Purpose |
-|--------|------|---------|---------|
-| `publicKey` | `String` | required | Your public ingest key |
-| `baseUrl` | `String` | `https://api.flameup.ai/api/v1` | Override for staging |
-| `eventNamePrefix` | `String?` | `null` | Stripped before send |
-| `enabled` | `bool` | `true` | Kill switch, no rebuild needed |
-| `timeout` | `Duration` | `10s` | Per request |
-
-#### Methods
-
-```dart
-FlameUp.instance.setUser('user_12345');
-FlameUp.instance.logEvent(name: 'start_quiz', parameters: {'exam': 'RPSC'});
-FlameUp.instance.logScreenView(name: 'sales_page');
-FlameUp.instance.setPushToken(token);
-FlameUp.instance.logoutUser();
-```
-
-| Method | Calls | Scope needed |
+| App moment | Call | Scope needed |
 |--------|-------|--------------|
-| `setUser(String userId)` | registers this device | `devices:register` |
-| `logEvent(name:, parameters:)` | `POST /track` | `events:write` |
-| `logScreenView(name:, parameters:)` | `POST /track` | `events:write` |
-| `setPushToken(String token)` | `POST /people/{external_id}/devices` | `devices:register` |
-| `logoutUser()` | `DELETE /people/{external_id}/devices/{token}` | `devices:register` |
+| User logs in | `POST /people/{userId}/devices` with the FCM token — see [Devices](/devices) | `devices:register` |
+| Something happens | `POST /track` with `{external_id, event, parameters}` | `events:write` |
+| Screen view | `POST /track` (an ordinary event, e.g. `screen_viewed`) | `events:write` |
+| FCM rotates the token | `POST /people/{userId}/devices` again with the new token | `devices:register` |
+| User logs out | `DELETE /people/{userId}/devices/{token}` | `devices:register` |
 
 `parameters` is the wire field name — `properties` is accepted as an alias but `parameters` is canonical.
-
-#### Identity
-
-`setUser` takes **your own user id** — the same value you send to `/identify` and `/track`. There is no Flameup UUID to fetch, cache, or pass around.
-
-It also registers the current FCM token against that user, so a normal app never touches a token directly. `setPushToken` exists for the refresh case.
 
 <Callout kind="info">There is no client-side event filter. Send everything, the same as any other analytics SDK — campaigns are authored in the Flameup dashboard, and triggers match the event name exactly, so an event only starts a journey when a campaign names it precisely. Deciding what matters is a dashboard change, not an app release.</Callout>
 
 <Callout kind="warning">Wire `onTokenRefresh`, not just `getToken()`. FCM rotates device tokens, and a stale token drops every push silently — with no error anywhere in your logs.</Callout>
 
-`logoutUser()` unregisters this device **before** clearing local state. Skip it and the next person to use that handset keeps receiving the previous user's notifications.
+Unregister the device **before** clearing local login state. Skip it and the next person to use that handset keeps receiving the previous user's notifications.
 
 #### Traits
 

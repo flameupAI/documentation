@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Welcome to Flameup - The customer engagement platform for modern applications. Updated January 2026.
+description: Welcome to Flameup - The customer engagement platform for modern applications. Updated August 2026.
 ---
 
 ## Welcome to Flameup
@@ -46,7 +46,7 @@ Flameup provides a complete toolkit for customer engagement:
     **Messaging APIs** - Reach users through push notifications.
 
     - **Campaigns**: Automated messages triggered by events or schedules
-    - **Messaging APIs**: Push notifications and emails for confirmations, alerts, and updates
+    - **Messaging APIs**: Transactional push notifications for confirmations, alerts, and updates. Email is sent through campaigns and the dashboard, not through an API key
     - **Push Notifications**: iOS, Android and Web push support
   </Tab>
 </Tabs>
@@ -69,7 +69,7 @@ Understanding these key concepts will help you get the most out of Flameup:
   <Expandable title="API Keys" default-open="false">
     API keys authenticate your requests and determine what actions you can perform.
 
-    - **Format**: `ws_live_{workspace}_{random}.{secret}`
+    - **Format**: `ws_live_{workspace}_{random}.{secret}` for server (secret) keys, `pk_live_{workspace}_{random}.{secret}` for public keys safe to ship in an app
     - **Permissions**: Granular control over read/write access
 
     See the [Authentication](/authentication) guide for details.
@@ -182,7 +182,7 @@ curl -X POST https://api.flameup.ai/api/v1/track \
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Liveness. Returns `{status: "alive"}` |
-| `GET /api/v1/health` | Readiness, with per-service status for the database and event store |
+| `GET /api/v1/health` | Readiness, with per-service status for `postgres`, `clickhouse` and `redis`. Watch `redis` in particular: it drives the wait scheduler, so a workspace whose journeys stall at wait steps should check it first |
 
 Neither requires authentication, and neither counts against your rate limit.
 
@@ -199,7 +199,7 @@ Neither requires authentication, and neither counts against your rate limit.
     Capture user behavior with the [Events API](/events) to power analytics and campaigns.
   </Step>
   <Step title="Send Messages" icon="send">
-    Set up [Campaigns](/campaigns) or use the [Messaging APIs](/transactional) to send push notifications and emails.
+    Set up [Campaigns](/campaigns) or use the [Messaging APIs](/transactional) to send push notifications.
   </Step>
 </Steps>
 
