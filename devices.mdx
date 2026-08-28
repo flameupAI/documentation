@@ -260,7 +260,34 @@ device = response.json()
 }
 ```
 
-<Callout kind="info">Registration returns only the new `device_id`, not the full device object. Use the List Devices endpoint to retrieve full device details.</Callout>
+When the `external_id` is not yet a known person, registration **creates one**
+— a minimal profile with just that identifier — and the response then carries
+`"person_created": true`. Its absence means the person already existed; seeing
+it on an identifier you believed established means you found a typo, not a new
+user.
+
+<Callout kind="info">Registration returns only the `device_id`, not the full device object. Use the List Devices endpoint to retrieve full device details.</Callout>
+
+### Registration moves the token
+
+Registration is an atomic upsert keyed on `(workspace, token)`. If the token is
+already registered — to anyone — the existing row is **reassigned to the person
+in the URL**, reactivated (`is_active` and `is_valid` back to `true`), and its
+`registration_count` bumped. This is the mechanic the login/logout flow relies
+on: when a different user logs in on the same handset, re-registering the
+device's token rebinds the device to them, and the previous user stops
+receiving pushes on it.
+
+Registration errors:
+
+| Status | When |
+|---|---|
+| `400` | `token` outside 10–4096 chars, or `platform` not `ios`/`android`/`web` |
+| `404` | The `external_id` is whitespace-only, or equals an existing person's Flameup **UUID** — deliberately refused so devices never bind to raw UUIDs |
+| `409` | `Cannot register device for inactive person` |
+
+Note what is *not* on that list: an unknown `external_id` is not an error —
+registration creates the person, as above.
 
 ## List Devices
 
@@ -383,9 +410,14 @@ curl -X POST "https://api.flameup.ai/api/v1/people/{external_id}/devices" \
 
 ## Delete a Device
 
-Remove a device token (e.g., when user logs out or uninstalls).
+Stop pushes to a device token (e.g., when user logs out or uninstalls).
 
 **Endpoint:** `DELETE /api/v1/people/{external_id}/devices/{token}`
+
+Delete is a **soft invalidate**: the row is kept with `is_active` and
+`is_valid` set `false`, it still appears in List Devices, and re-registering
+the same token reactivates it. That is what makes logout → login on the same
+handset work without a fresh FCM token.
 
 <CodeGroup>
 ```javascript
@@ -433,7 +465,11 @@ Device tokens have a lifecycle that Flameup manages automatically:
     Token is used for push delivery. `last_used_at` is updated with each use.
   </Step>
   <Step title="Token Refresh" icon="refresh-cw">
-    FCM may issue a new token. Re-register with the new token; Flameup deduplicates by device.
+    FCM may issue a new token. Re-register with the new token. Deduplication is
+    **by token, not by device**: the rotated token inserts a new row, and the
+    old token's row stays active until a delivery failure invalidates it or
+    cleanup reaps it. FCM stops delivering to rotated-away tokens, so the stale
+    row is harmless — but expect to see both in List Devices for a while.
   </Step>
   <Step title="Invalidation" icon="x">
     If push delivery fails (uninstall, revoked permissions), token is marked:
@@ -499,15 +535,21 @@ FCM tokens can change. Handle token refresh in your app:
 
 <ExpandableGroup>
   <Expandable title="Register on Login" default-open="true">
-    Register the device token after user login to associate it with the correct person:
+    Register the device token after user login to associate it with the correct
+    person. Register with **your own user id** — the same identifier you send
+    to `/identify` — never the Flameup UUID, which the register route refuses:
 
     ```javascript
     async function onUserLogin(userId) {
       const fcmToken = await getFCMToken();
-      const person = await flare.identifyUser(userId);
-      await flare.registerDevice(person.id, fcmToken);
+      await flare.identifyUser(userId);
+      await flare.registerDevice(userId, fcmToken);
     }
     ```
+
+    If the token was previously registered to another user on this handset,
+    registration rebinds it — see
+    [Registration moves the token](#registration-moves-the-token).
   </Expandable>
   <Expandable title="Unregister on Logout" default-open="false">
     Remove the device token when user logs out to prevent notifications going to the wrong person:
@@ -527,12 +569,14 @@ FCM tokens can change. Handle token refresh in your app:
     - Push notifications go to all active devices by default
   </Expandable>
   <Expandable title="Update Device Info" default-open="false">
-    Keep device information current for better analytics and targeting:
+    Keep device information current for better analytics and targeting. There
+    is no separate update endpoint for API keys — re-register the same token
+    with the new fields (see [Update a Device](#update-a-device)):
 
     ```javascript
     // On app update
-    async function onAppUpdate(deviceId, newVersion) {
-      await flare.updateDevice(deviceId, {
+    async function onAppUpdate(externalId, fcmToken, newVersion) {
+      await flare.registerDevice(externalId, fcmToken, {
         app_version: newVersion
       });
     }
@@ -546,7 +590,7 @@ FCM tokens can change. Handle token refresh in your app:
 
 | Issue | Solution |
 |-------|----------|
-| Token not registered | Verify the `external_id` names a person and the token is valid |
+| Token not registered | Check the token is valid (10–4096 chars) and the `external_id` is not whitespace or a Flameup UUID. An *unknown* id is not the cause — registration creates the person |
 | Wrong platform | Ensure `platform` matches the device (`ios`/`android`/`web`) |
 | Invalid token | Token may have expired; request a fresh token from FCM |
 | User not receiving | Check `is_active` and `is_valid` are both `true` |
