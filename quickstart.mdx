@@ -147,7 +147,7 @@ curl "https://api.flameup.ai/api/v1/people/user_12345/events" \
 ```json
 {
   "success": true,
-  "person_id": "7881c966-ab64-4c36-adc9-3fa0359c0e9a",
+  "person_id": "user_12345",
   "events": [
     {
       "id": "80c2a0d3-dd72-4fde-9dfc-c0b76dd3e42d",
@@ -159,6 +159,9 @@ curl "https://api.flameup.ai/api/v1/people/user_12345/events" \
   "total": 1
 }
 ```
+
+`person_id` echoes the identifier you asked for — your own id, not a Flameup
+UUID.
 
 You can also open **People** in the dashboard and find `user_12345` there.
 
@@ -172,7 +175,7 @@ You can also open **People** in the dashboard and find `user_12345` there.
     **Settings → Messaging Channels → Push** first.
   </Card>
   <Card title="Track from your app" icon="smartphone" href="sdks">
-    A copy-paste Flutter client, plus Node and Python examples.
+    Copy-paste Node and Python clients, plus the Flutter integration recipe.
   </Card>
   <Card title="People API" icon="users" href="people">
     Read, search, update and batch-upsert people.

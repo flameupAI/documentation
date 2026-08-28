@@ -36,8 +36,12 @@ The prefix tells you where a key is allowed to live.
 
 | Prefix | Where it belongs | What it can hold |
 |---|---|---|
-| `ws_live_` / `ws_test_` | **Your server only.** Backends, scripts, integrations | Any permission, including `*` |
-| `pk_live_` / `pk_test_` | **Inside your app or website.** Shipped to users' devices | `events:write`, `devices:register`, `people:identify` — and nothing else |
+| `ws_live_` | **Your server only.** Backends, scripts, integrations | Any permission, including `*` |
+| `pk_live_` | **Inside your app or website.** Shipped to users' devices | `events:write`, `devices:register`, `people:identify` — and nothing else |
+
+These are the only two prefixes. The `environment` label on a key (`live` or
+`test`) does not change them — a test-labelled key is still minted with a
+`ws_live_` or `pk_live_` prefix.
 
 A public key is restricted by the server, not by convention: a permission
 outside that list is rejected when the key is created **and** when it is
@@ -47,9 +51,10 @@ updated, so one cannot be widened later.
 
 ## Authentication Methods
 
-### Authorization Header (Recommended)
+### Authorization Header
 
-Pass your API key in the `Authorization` header using the Bearer scheme:
+Pass your API key in the `Authorization` header using the Bearer scheme. This
+is the only method — there is no query-parameter or cookie alternative:
 
 <CodeGroup>
 ```javascript
@@ -95,7 +100,7 @@ not a key.
 | People | `GET`/`POST`/`PUT`/`DELETE /people`, `/people/{id}`, `/people/search`, `/people/upsert`, `/people/batch` |
 | Events | `GET /people/{external_id}/events`, `GET /events/search` |
 | Devices | `POST`/`DELETE`/`GET /people/{external_id}/devices` |
-| Push | `POST .../push/send`, `/send/batch`, token validate and suppress, `GET .../push/status`, `/notifications`, `/analytics`, `/metrics` |
+| Push | `POST .../push/send`, `/send/batch`, `POST .../push/tokens/validate` |
 | Campaigns | `POST /campaigns/{id}/trigger` — starting one, not authoring it |
 
 **Dashboard only — an API key will not work:** workflows, segments, message
@@ -110,16 +115,21 @@ API keys have granular permissions that control access to different resources:
 
 ### Permission Categories
 
+These twelve strings are the complete set any route checks:
+
 | Category | Permissions | Description |
 |----------|-------------|-------------|
-| **Events** | `events:read`, `events:write`, `events:list` | Read and track user events |
-| **People** | `people:read`, `people:write`, `people:identify`, `people:delete`, `people:list` | Manage user profiles. `people:identify` is the narrow, app-safe one — see below |
-| **Campaigns** | `campaigns:read`, `campaigns:write`, `campaigns:trigger` | Manage and trigger campaigns |
-| **Analytics** | `analytics:read` | Access reporting data |
-| **Workspace** | `workspace:read`, `workspace:write` | Workspace settings |
+| **Events** | `events:read`, `events:write` | Track user events, and read them back |
+| **People** | `people:read`, `people:write`, `people:identify`, `people:delete` | Manage user profiles. `people:identify` is the narrow, app-safe one — see below |
+| **Campaigns** | `campaigns:trigger` | Trigger webhook campaigns. There is no key permission for creating or editing campaigns — that is dashboard-only |
 | **Devices** | `devices:register`, `devices:read`, `devices:write` | `devices:register` registers and unregisters only, and is safe to embed in an app; `devices:read` lists only; `devices:write` does both |
-| **Push** | `push:send`, `push:read` | Send push, and read delivery status and analytics. Never grantable on a public key: sending renders a template against the recipient's stored record |
+| **Push** | `push:send`, `push:read` | `push:send` sends push (single and batch) and validates tokens. `push:read` is reserved for delivery-history routes that answer `501` today. Neither is grantable on a public key: sending renders a template against the recipient's stored record |
 | **Full Access** | `*` | Wildcard granting access to all resources |
+
+A few other permission names (`events:list`, `people:list`, `campaigns:read`,
+`campaigns:write`, `analytics:read`, `workspace:read`, `workspace:write`) are
+accepted when a key is created but gate no route — a key holding only them can
+reach nothing. Do not grant them expecting access.
 
 `people:identify` deserves its own note. It authorizes `POST /identify` and
 nothing else — creating or updating one person's traits by an identifier you
@@ -131,18 +141,19 @@ carries `/people` CRUD and a 1000-operation batch route, and it is the only
 
 <Tabs>
   <Tab title="Read Only" icon="eye">
-    For dashboards and analytics that only need to view data:
+    For integrations that only need to view data:
 
     ```json
     {
       "permissions": [
         "events:read",
-        "people:read",
-        "campaigns:read",
-        "analytics:read"
+        "people:read"
       ]
     }
     ```
+
+    These are the only two read scopes an API key can use — campaign and
+    analytics reads are dashboard-only surfaces no key can reach.
   </Tab>
   <Tab title="Event Tracking" icon="activity">
     For client applications that track user behavior:
@@ -165,7 +176,7 @@ carries `/people` CRUD and a 1000-operation batch route, and it is the only
     }
     ```
 
-    Or explicitly:
+    Or explicitly — all twelve enforced permissions:
 
     ```json
     {
@@ -174,10 +185,14 @@ carries `/people` CRUD and a 1000-operation batch route, and it is the only
         "events:write",
         "people:read",
         "people:write",
+        "people:identify",
         "people:delete",
-        "campaigns:read",
-        "campaigns:write",
-        "campaigns:trigger"
+        "devices:read",
+        "devices:write",
+        "devices:register",
+        "campaigns:trigger",
+        "push:send",
+        "push:read"
       ]
     }
     ```
@@ -248,6 +263,18 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" 
 | `key_type` | no | `secret` (default) or `public` |
 | `environment` | no | `live` (default) or `test`. A label only — see below |
 | `expires_at` | no | ISO 8601. Must be in the future |
+| `description` | no | Free text, shown alongside the name |
+| `ip_whitelist` | no | Array of single IPs (`"203.0.113.7"`) or CIDR blocks (`"203.0.113.0/24"`). See below |
+
+<Callout kind="warning">**The IP allowlist is enforced only when the server can
+trust the client IP it sees.** Behind an ingress or load balancer that is not in
+the server's trusted-proxy set, a mismatch is logged at WARN and the request
+**proceeds** — enforcing there would reject every legitimate caller, since the
+observed address would be the proxy's. Rejection happens only in deployments
+where the client IP is trustworthy (`TRUSTED_PROXIES` configured, or
+`API_KEY_IP_ALLOWLIST_ENFORCE` set). Treat the allowlist as defence in depth,
+not as the sole control on a key. A malformed entry never matches — it fails
+closed.</Callout>
 
 **Response (`201`):**
 
@@ -265,22 +292,46 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys" 
 }
 ```
 
-`key` is the value you authenticate with, and it appears in this response and
-nowhere else. `key_prefix` is safe to log and to display later.
+`key` is the value you authenticate with. It appears here and in a
+[refresh](#key-rotation) response — nowhere else. `key_prefix` is safe to log
+and to display later.
 
 <Callout kind="info">Asking for a permission that a public key may not hold returns `400` with the allowed list in the message, before any key is created — so a rejected request never leaves a half-made key behind.</Callout>
 
 <Callout kind="warning">**`environment` does not isolate data.** It is recorded on
-the key and shown in the dashboard, but no query filters by it: a `ws_test_` key
-writes to the same tables a `ws_live_` key reads. To keep test traffic out of
-your real data, use a **separate workspace** — that boundary is enforced on
-every read and write.</Callout>
+the key and shown in the dashboard, but no query filters by it: a test-labelled
+key writes to the same tables a live one reads (and both carry the same
+`ws_live_`/`pk_live_` prefix). To keep test traffic out of your real data, use a
+**separate workspace** — that boundary is enforced on every read and write.</Callout>
+
+## Managing Keys
+
+The same dashboard-token surface carries the full key lifecycle:
+
+| Method | Endpoint | Does |
+|---|---|---|
+| `GET` | `/workspaces/{workspace_id}/api-keys` | List keys (prefixes and metadata, never secrets) |
+| `GET` | `/workspaces/{workspace_id}/api-keys/{key_id}` | One key's metadata |
+| `PUT` | `/workspaces/{workspace_id}/api-keys/{key_id}` | Partial update — see below |
+| `DELETE` | `/workspaces/{workspace_id}/api-keys/{key_id}` | Revoke the key |
+| `POST` | `/workspaces/{workspace_id}/api-keys/{key_id}/refresh` | Rotate the secret — see [Key Rotation](#key-rotation) |
+| `GET` | `/workspaces/{workspace_id}/api-keys/{key_id}/usage` | Usage statistics for the key |
+
+`PUT` updates only the fields present in the body: `name`, `description`,
+`permissions`, `environment`, `expires_at`, `ip_whitelist`. Permissions are
+revalidated against the key's stored type, so a public key cannot be widened
+after the fact. `expires_at` is three-state: omit it to leave the expiry
+unchanged, send a timestamp to set it, or send an explicit `null` to **clear**
+it and make the key non-expiring.
 
 ## Security Features
 
 ### Key Rotation
 
-Regularly rotate your API keys for security. Use the refresh endpoint to generate a new key while maintaining the same permissions:
+Regularly rotate your API keys for security. The refresh endpoint mints a
+**new secret for the same key**: the `key_prefix`, id, and permissions are
+unchanged, and the response carries the new full `key` — the only time it is
+shown. The old secret stops working immediately.
 
 ```bash
 curl -X POST "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/api-keys/{key_id}/refresh" \
@@ -319,9 +370,13 @@ Returned when rate limits are exceeded:
 ```json
 {
   "error": "Rate limit exceeded",
-  "message": "Too many requests. Please try again later."
+  "message": "Too many requests. Please try again later.",
+  "scope": "ws-ingest",
+  "gate": "local"
 }
 ```
+
+See [Rate Limits](/rate-limits) for what `scope` and `gate` mean.
 
 ## Best Practices
 
@@ -330,7 +385,7 @@ Returned when rate limits are exceeded:
     Use a separate **workspace** per environment, with its own keys. Separate keys alone do not separate data — only the workspace boundary does. Never use production keys in development.
   </Expandable>
   <Expandable title="Apply Least Privilege" default-open="false">
-    Only grant the minimum permissions required. A key that only needs to track events shouldn't have campaign management permissions.
+    Only grant the minimum permissions required. A key that only needs to track events shouldn't be able to trigger campaigns or send push.
   </Expandable>
   <Expandable title="Rotate Keys Regularly" default-open="false">
     Rotate API keys periodically, especially for production systems. This limits the impact if a key is compromised.

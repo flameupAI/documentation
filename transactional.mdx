@@ -5,7 +5,7 @@ description: Send transactional push notifications to your users
 
 ## Overview
 
-Flameup's transactional push API sends notifications directly to a user's registered devices. Use it for notifications triggered by user actions like order confirmations, password resets, and account alerts.
+Flameup's transactional push API sends a notification to a user's device. Use it for notifications triggered by user actions like order confirmations, password resets, and account alerts.
 
 <Callout kind="info">Transactional **email** is not sent through the public API key — send it via campaigns or the Flameup dashboard. See [Campaigns](/campaigns).</Callout>
 
@@ -13,13 +13,15 @@ Flameup's transactional push API sends notifications directly to a user's regist
 
 ## Push Notifications
 
-Send push notifications to a user's registered devices.
-
-<Callout kind="info">**Required**: User must have a registered device token. See [Devices API](/devices) for registration. Your API key must have access to the target workspace.</Callout>
+<Callout kind="info">**Required permission**: `push:send`, which also covers batch send and token validation. It can never be granted to a public (`pk_live_`) key — sending renders a template against the recipient's stored record. The user must have a registered device token (see [Devices API](/devices)), and the `{workspace_id}` in the URL must be your API key's workspace.</Callout>
 
 ### Send Push Notification
 
 **Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send`
+
+This sends to exactly **one device**: the first of the person's active tokens.
+There is no way on this route to pick a platform or fan out to every device a
+person has — the fields below are the complete set the endpoint honours.
 
 <CodeGroup>
 ```javascript
@@ -45,12 +47,11 @@ async function sendPush(externalId, title, body, options = {}) {
 }
 
 // Example: Order confirmation
-await sendPush('550e8400-e29b-41d4-a716-446655440000',
+await sendPush('user_12345',
   'Order Confirmed!',
   'Your order #ORD-12345 has been confirmed. Total: $99.99',
   {
-    action_url: 'myapp://orders/ORD-12345',
-    ios_badge: 1
+    action_url: 'myapp://orders/ORD-12345'
   }
 );
 ```
@@ -76,11 +77,10 @@ def send_push(external_id, title, body, **options):
 
 # Example: Order confirmation
 send_push(
-    '550e8400-e29b-41d4-a716-446655440000',
+    'user_12345',
     'Order Confirmed!',
     'Your order #ORD-12345 has been confirmed. Total: $99.99',
-    action_url='myapp://orders/ORD-12345',
-    ios_badge=1
+    action_url='myapp://orders/ORD-12345'
 )
 ```
 
@@ -92,8 +92,7 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
     "external_id": "user_12345",
     "title": "Order Confirmed!",
     "body": "Your order #ORD-12345 has been confirmed. Total: $99.99",
-    "action_url": "myapp://orders/ORD-12345",
-    "ios_badge": 1
+    "action_url": "myapp://orders/ORD-12345"
   }'
 ```
 </CodeGroup>
@@ -103,33 +102,24 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `external_id` | string | Yes | Your own user id — the same `userId` you send to `/identify` and `/track`. Not the Flameup person UUID |
-| `title` | string | Yes | Notification title |
-| `body` | string | Yes | Notification body text |
-| `platform` | string | No | Target platform: `ios`, `android`, `web`, or `all` (default). |
+| `title` | string | Yes | Notification title. Supports `{{...}}` template variables |
+| `body` | string | Yes | Notification body text. Supports `{{...}}` template variables |
 | `image_url` | string | No | URL for rich notification image |
 | `action_url` | string | No | Deep link URL when notification is tapped |
-| `priority` | string | No | Delivery priority: `low`, `normal`, `high` |
-| `ttl` | integer | No | Time to live in seconds |
-| `custom_data` | object | No | Custom key-value payload for your app |
+| `custom_data` | object | No | Custom key-value payload for your app, delivered on the FCM `data` field (reserved FCM keys are stripped) |
+| `variables` | object | No | Values for `{{...}}` placeholders in `title`/`body` |
+| `tags` | array | No | Free-form tags stored on the send record |
 
-### iOS Options
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `ios_badge` | integer | App badge count |
-| `ios_sound` | string | Notification sound (e.g., `default`) |
-| `ios_category` | string | Action category for interactive notifications |
-
-### Android Options
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `android_channel_id` | string | A notification channel **in your app**. Omit it and Android uses your app's default |
-| `android_icon` | string | A drawable name **in your app**. Omit it — Android then uses your app's own notification icon, which is almost always what you want |
-| `android_color` | string | Icon color (e.g., `#FF0000`) |
-| `android_sound` | string | Notification sound |
+<Callout kind="warning">**There are no platform or delivery options on this
+route.** `platform`, `priority`, `ttl`, and the `ios_*`/`android_*` fields you
+may find in older examples are accepted in the JSON but **silently dropped** —
+delivery always uses the platform the device was registered with, sound
+`default`, and normal priority. Do not build logic on fields this endpoint
+ignores.</Callout>
 
 ### Response
+
+Always `200` when the request itself was processed — check the `status` field:
 
 ```json
 {
@@ -143,85 +133,114 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 
 | Field | Description |
 |-------|-------------|
-| `message_id` | Flameup message ID |
-| `status` | `pending`, `sent`, `delivered`, or `failed` |
-| `sent_at` | Timestamp when sent |
-| `provider` | Push provider used (`fcm`) |
+| `message_id` | Flameup message ID (a `skipped-<unix>` placeholder for skipped sends) |
+| `status` | `sent`, `skipped`, or `policy_suppressed` — see below |
+| `sent_at` | Timestamp when handled |
+| `provider` | `fcm` when sent, `none` when skipped |
 | `provider_id` | External message ID from provider |
-| `error` | Error message (only if failed) |
+| `error` | Reason, present when skipped (e.g. `no active device tokens`) |
 
-<Callout kind="warning">Do not set `android_icon` unless your app really ships a drawable by that exact name. The value overrides your app's configured default, and a name it does not have means the notification silently fails to display while this call still reports success.</Callout>
+| `status` | Meaning |
+|---|---|
+| `sent` | FCM accepted the message. This does **not** confirm it reached the handset — there is no delivery read-back today |
+| `skipped` | The person has no active device token, or their token is suppressed. Still `200`: not having a device is a normal state, not an error |
+| `policy_suppressed` | The workspace [send policy](#send-policy) blocked it — quiet hours or a frequency cap |
 
----
+`sent` is as much as the API can tell you. FCM has no status-check API, so
+there is no endpoint that can report delivery beyond what the send response
+already said.
 
-## Check delivery
+## Send policy
 
-Sending returns `"status": "sent"`, which means FCM accepted the message — not
-that it reached the handset. To find out what happened:
+A workspace can carry a **send policy** (dashboard → workspace settings,
+`settings.send_policy`) that constrains push delivery — and it applies to this
+API, not just to campaigns. When the policy blocks a send, the response is
+still `200`, with `"status": "policy_suppressed"`. The suppressed message is
+**dropped, not queued** — it is not retried when the window reopens.
 
-**Endpoint:** `GET /api/v1/workspaces/{workspace_id}/push/status/{message_id}`
+Three rules can suppress a transactional send:
 
-```bash
-curl "https://api.flameup.ai/api/v1/workspaces/{workspace_id}/push/status/{message_id}" \
-  -H "Authorization: Bearer {API_KEY}"
-```
+- **Quiet hours** — a local-time window (e.g. 22:00–08:00 in the workspace's
+  policy timezone) during which nothing is pushed. Never bypassable.
+- **Daily cap** (`max_pushes_per_day`) — a per-user cap that resets at local
+  midnight in the policy timezone.
+- **Rolling-window cap** (`max_pushes_per_window` over `window_hours`) — a
+  per-user cap over a sliding window of 1–168 hours, counted in absolute time
+  with no calendar reset. Configured as both-or-neither with `window_hours`.
 
-Requires `push:read`.
+<Callout kind="warning">If your workspace enables quiet hours, an order
+confirmation sent at 23:00 comes back `policy_suppressed` and is never
+delivered. The response does not say which rule suppressed it — that is
+recorded server-side. If your transactional sends must always go out, keep the
+send policy off in that workspace, or route them from a workspace without
+one.</Callout>
 
 ## Send to many people at once
 
 **Endpoint:** `POST /api/v1/workspaces/{workspace_id}/push/send/batch`
 
-Up to **1000 recipients** in one request. Each recipient carries its own device
-token and optional per-recipient template variables.
+Up to **1000 recipients** in one request, each rendered and sent individually.
+
+<Callout kind="warning">Unlike single send, this route identifies each
+recipient by the **Flameup person UUID**, not your external id — and
+`device_token` does not address a device directly: it **selects one of that
+person's active devices**. A token that is not an active device of that person
+yields `"status": "skipped"` — Flameup never sends to a raw token that isn't
+bound to the named person.</Callout>
 
 ```json
 {
   "title": "Your order shipped",
   "body": "Hi {{name}}, it's on its way",
   "recipients": [
-    { "user_id": "user_123", "device_token": "…", "platform": "android",
-      "variables": { "name": "Jane" } }
+    { "user_id": "550e8400-e29b-41d4-a716-446655440000", "device_token": "…",
+      "platform": "android", "variables": { "name": "Jane" } }
   ]
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `title`, `body` | Yes | |
+| `title`, `body` | Yes | Template variables supported |
 | `recipients` | Yes | 1–1000 items |
-| `recipients[].device_token` | Yes | This route addresses devices directly, not people |
+| `recipients[].user_id` | Yes | The Flameup person **UUID** (from `GET /people/{id}` with `people:read`). A non-UUID value fails that recipient |
+| `recipients[].device_token` | Yes | Which of that person's active devices to send to |
 | `recipients[].platform` | Yes | `ios`, `android` or `web` |
-| `recipients[].user_id` | No | Your own user id, for attribution. Note this route uses `user_id`, unlike the single-send route which takes `external_id` |
 | `recipients[].variables` | No | Template variables for that recipient |
 | `variables` | No | Defaults applied where a recipient sets none |
 | `image_url`, `action_url`, `tags` | No | |
 
 Requires `push:send`.
 
-## History and analytics
+**Response** (`200`) — one result per recipient, in request order, plus a
+summary. Recipient results use the same `status` values as single send
+(`sent` / `skipped` / `policy_suppressed`), with one addition: `"failed"` when
+that recipient's send errored (bad UUID, provider failure):
 
-| Endpoint | Returns |
-|---|---|
-| `GET .../push/notifications` | Recent notifications for the workspace |
-| `GET .../push/notifications/{id}` | One notification in full |
-| `GET .../push/analytics` | Delivery and engagement aggregates |
-| `GET .../push/metrics` | Operational counters |
+```json
+{
+  "results": [
+    { "message_id": "…", "status": "sent", "provider": "fcm", "sent_at": "…" },
+    { "message_id": "", "status": "failed", "error": "failed to send push notification", "sent_at": "…" }
+  ],
+  "summary": { "total": 2, "sent": 1, "failed": 1, "processed": "2026-08-28T10:30:00Z" }
+}
+```
 
-All require `push:read`.
+One trap in the summary: `summary.sent` counts every non-`failed` result —
+`skipped` and `policy_suppressed` recipients count as "sent" there. To know
+who actually got a push, walk `results` and count `status === "sent"`.
 
-## Managing dead tokens
+## Validating tokens
 
-Device tokens expire and get revoked. These let you deal with that rather than
-sending into the void:
+**Endpoint:** `POST .../push/tokens/validate` (requires `push:send`)
 
-| Endpoint | Purpose |
-|---|---|
-| `POST .../push/tokens/validate` | Check a `device_token` + `platform` before relying on it |
-| `POST .../push/tokens/suppress` | Stop sending to a token, with a reason |
-| `DELETE .../push/tokens/suppress/{id}` | Lift a suppression |
-
-All require `push:send`.
+Checks a `device_token` + `platform` pair and returns `{"valid": true|false}`.
+Be aware this is a **format check only** — token length and shape per platform.
+It does not ask FCM whether the token is live, so a well-formed revoked token
+still validates. The reliable liveness signal is a delivery failure, which
+marks the stored token invalid automatically (see
+[Devices — Token Lifecycle](/devices#token-lifecycle)).
 
 ---
 
@@ -233,8 +252,7 @@ All require `push:send`.
     // Order confirmation
     await sendPush(externalId, 'Order Confirmed!',
       'Your order #ORD-12345 is confirmed. Total: $99.99', {
-        action_url: 'myapp://orders/ORD-12345',
-        ios_badge: 1
+        action_url: 'myapp://orders/ORD-12345'
     });
 
     // Shipping notification
@@ -255,15 +273,12 @@ All require `push:send`.
     // New login alert
     await sendPush(externalId, 'New Login Detected',
       'New sign-in from Chrome on Windows in New York, US', {
-        action_url: 'myapp://security',
-        priority: 'high'
+        action_url: 'myapp://security'
     });
 
     // Password changed
     await sendPush(externalId, 'Password Changed',
-      'Your password was changed. If this wasn\'t you, contact support.', {
-        priority: 'high'
-    });
+      'Your password was changed. If this wasn\'t you, contact support.');
     ```
   </Tab>
   <Tab title="Payments" icon="credit-card">
@@ -277,8 +292,7 @@ All require `push:send`.
     // Payment failed
     await sendPush(externalId, 'Payment Failed',
       'Your payment of $49.99 was declined. Please update your card.', {
-        action_url: 'myapp://billing',
-        priority: 'high'
+        action_url: 'myapp://billing'
     });
     ```
   </Tab>
@@ -294,8 +308,7 @@ All require `push:send`.
     // New message
     await sendPush(externalId, 'New message from Jane',
       'Hey, are you free for lunch?', {
-        action_url: 'myapp://chat/chat_789',
-        ios_badge: 5
+        action_url: 'myapp://chat/chat_789'
     });
     ```
   </Tab>
@@ -305,41 +318,42 @@ All require `push:send`.
 
 ## Error Handling
 
-<Callout kind="warning">Handle these common error cases in your integration.</Callout>
+The single-send route splits outcomes across the HTTP status and the body's
+`status` field. **A `200` is not proof anything was sent** — the no-device
+case, the suppressed-token case, and a policy suppression all come back `200`:
 
-### Push Errors
+| HTTP | Body | Meaning |
+|---|---|---|
+| `200` | `"status": "sent"` | FCM accepted the message |
+| `200` | `"status": "skipped"`, `"error": "no active device tokens"` | The person has no active device |
+| `200` | `"status": "skipped"`, `"error": "device token suppressed"` | The person's token is suppressed |
+| `200` | `"status": "policy_suppressed"` | Blocked by the workspace [send policy](#send-policy) |
+| `404` | `{"error": "Person not found"}` | Unknown `external_id` in this workspace |
+| `500` | `{"error": "failed to send push notification"}` | FCM not configured for the workspace, or a provider failure |
 
-```json
-{
-  "message_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "failed",
-  "error": "No valid device tokens found for user"
-}
-```
-
-Common push errors:
-- No device tokens registered for user
-- Invalid or expired device token
-- FCM configuration missing for workspace
+Single send never returns `200` with `"status": "failed"` — that value exists
+only in per-recipient batch results.
 
 ### Handling in Code
 
 ```javascript
 async function sendNotification(externalId, title, body, options) {
-  try {
-    const result = await sendPush(externalId, title, body, options);
+  const result = await sendPush(externalId, title, body, options);
 
-    if (result.status === 'failed') {
-      console.error('Push failed:', result.error);
-      // Fallback to email or in-app notification
-      return null;
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Network error:', error);
-    throw error;
+  if (!result.status) {
+    // HTTP-level error body: 404 unknown external_id, 500 provider failure
+    console.error('Push request failed:', result.error);
+    return null;
   }
+
+  if (result.status !== 'sent') {
+    // 'skipped' or 'policy_suppressed' — a 200, but the user got nothing.
+    console.warn('Push not delivered:', result.status, result.error);
+    // Fall back to another channel
+    return null;
+  }
+
+  return result;
 }
 ```
 
@@ -358,8 +372,10 @@ async function sendNotification(externalId, title, body, options) {
     ```
 
     This changed: `/push/send` previously required the Flameup `person_id`
-    (UUID). It now requires `external_id`, so every API-key surface keys on the
-    same identifier.
+    (UUID). It now requires `external_id`, so the single-send route keys on the
+    same identifier as the rest of the API-key surface. The one holdout is
+    [batch send](#send-to-many-people-at-once), whose `recipients[].user_id` is
+    still the person UUID.
   </Expandable>
   <Expandable title="Include Deep Links" default-open="false">
     Always include an `action_url` so users can tap the notification to go directly to relevant content:
@@ -370,16 +386,13 @@ async function sendNotification(externalId, title, body, options) {
     });
     ```
   </Expandable>
-  <Expandable title="Set Appropriate Priority" default-open="false">
-    Use `priority: 'high'` for time-sensitive notifications like security alerts or 2FA codes.
-    Use `priority: 'low'` for non-urgent notifications to conserve user battery.
-  </Expandable>
   <Expandable title="Handle Missing Devices" default-open="false">
-    Not all users will have push enabled. Always have a fallback:
+    Not all users will have push enabled. A user without a device comes back as
+    a `200` with `status: "skipped"`, so check the status, not the HTTP code:
 
     ```javascript
     const result = await sendPush(externalId, title, body);
-    if (result.status === 'failed') {
+    if (result.status !== 'sent') {
       // Fall back to another channel, e.g. an email campaign or in-app message
       await notifyViaFallbackChannel(externalId, title, body);
     }

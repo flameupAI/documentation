@@ -40,7 +40,7 @@ A person in Flameup has the following structure:
 | `email` | string | User's email address (optional, max 254 chars) |
 | `phone` | string | User's phone number (optional, max 50 chars) |
 | `anonymousId` | string | Anonymous identifier for merging anonymous activity (transient, not persisted) |
-| `traits` | object | Custom user attributes (see validation rules) |
+| `traits` | object | Custom user attributes. Keys ≤255 chars; string values ≤10,000 chars; arrays ≤1,000 elements; objects ≤100 properties |
 | `created_at` | timestamp | When the person was created (read-only) |
 | `updated_at` | timestamp | When the person was last updated (read-only) |
 
@@ -121,6 +121,12 @@ curl -X POST "https://api.flameup.ai/api/v1/people" \
 
 <Callout kind="info">The identifier can be sent as `userId`, `user_id`, or `external_id` — these are aliases for the same value.</Callout>
 
+<Callout kind="info">**What the response echoes depends on `people:read`.** A
+key holding it gets the full person object back. A key with only
+`people:write` gets a trimmed echo — `{id, workspace_id, userId}` — because
+the full response merges the stored record, which is a read. This applies to
+Create and Upsert alike.</Callout>
+
 ## Get a Person
 
 Retrieve a person by their `userId` — the external identifier you provided when creating them.
@@ -157,6 +163,11 @@ curl "https://api.flameup.ai/api/v1/people/{userId}" \
   -H "Authorization: Bearer your_api_key"
 ```
 </CodeGroup>
+
+<Callout kind="warning">**An unknown `userId` currently returns `500`, not
+`404`,** on GET and PUT (DELETE returns a proper `404`). If a GET here starts
+answering `500 Internal server error`, check the identifier before assuming an
+outage. This is a known wart, not a contract to build on.</Callout>
 
 ## Update a Person
 
@@ -230,6 +241,11 @@ A successful update returns `200 OK` with a confirmation message, not the update
 
 <Callout kind="info">Updates are merged with existing trait data. Setting a trait to `null` stores a `null` value for that key — it does not remove the key.</Callout>
 
+A handful of trait keys are reserved and also update the person's dedicated
+fields: `email`, `phone`, `first_name`, `last_name`, `timezone`, `locale`.
+Sending `traits.email` updates the person's `email`, and an **empty string**
+clears `email` or `phone`.
+
 ## Upsert a Person
 
 Create a person if they don't exist, or update them if they do. This is the recommended approach for most integrations.
@@ -298,7 +314,10 @@ curl -X POST "https://api.flameup.ai/api/v1/people/upsert" \
 ```
 </CodeGroup>
 
-Upsert returns `201 Created` with the same person object as [Create a Person](#create-a-person), whether the person was newly created or updated.
+Upsert returns `201 Created` whether the person was newly created or updated.
+The body is the same as [Create a Person](#create-a-person): the full merged
+person object when your key holds `people:read`, the trimmed
+`{id, workspace_id, userId}` echo when it does not.
 
 ## List People
 
@@ -392,6 +411,14 @@ The response is the same shape as [List People](#list-people): `people`,
 Create or update multiple people in a single request.
 
 **Endpoint:** `POST /api/v1/people/batch`
+
+Limits, checked before anything is processed:
+
+- **1,000 operations** per request — more returns `400`
+- **1 MB** body — more returns `413`
+- The body takes an `identify` array only. A `track` array returns `400`
+  pointing you at `POST /api/v1/track/batch` — events are a different
+  permission (`events:write`) and a different route
 
 <CodeGroup>
 ```javascript
@@ -493,6 +520,11 @@ The response contains a `results` array with one entry per submitted record, plu
 | `error` | string | Error message (present only when `success` is `false`) |
 | `data` | object | The resulting person object (present only when `success` is `true`) |
 
+Per-item failures come back inside a `200` — check each entry's `success`, not
+the HTTP status. Note one asymmetry: batch `data` is the **full** person
+object even for a key without `people:read`; the trimmed-echo gating applies
+to the single Create/Upsert routes only.
+
 ## Delete a Person
 
 Delete a person and all associated data.
@@ -542,7 +574,10 @@ A successful delete returns `200 OK`:
 }
 ```
 
-<Callout kind="warning">This action is irreversible. All associated events and device tokens will also be deleted.</Callout>
+<Callout kind="warning">This action is irreversible. The person's events and
+device tokens are deleted with them. One caveat: event copies in the analytics
+store (ClickHouse) are **not** removed — aggregate analytics computed before
+the delete keep counting them.</Callout>
 
 ## Get Person Events
 

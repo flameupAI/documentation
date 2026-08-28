@@ -50,6 +50,7 @@ ingestion: `/identify` says **who someone is**, `/track` says **what they did**.
 | `userId` | string | Yes | Your own user id. `external_id` and `user_id` are accepted aliases |
 | `email` | string | No | |
 | `phone` | string | No | |
+| `anonymousId` | string | No | An anonymous id whose earlier events should belong to this person. The merge runs asynchronously after the response |
 | `traits` | object | No | Merged with existing traits; new values win |
 | `timestamp` | datetime | No | Defaults to now |
 
@@ -209,6 +210,18 @@ curl -X POST "https://api.flameup.ai/api/v1/track" \
 }
 ```
 
+Two fields appear only when they apply:
+
+- **`person_created: true`** — the `external_id` was not a known person, so
+  `/track` created a minimal one before storing the event. This is the only
+  signal that a mistyped identifier just minted a ghost profile instead of
+  attaching to the person you meant.
+- **`status: "accepted_with_warnings"`** with a **`warnings`** array — the
+  event was stored durably, but a post-storage processor (workflow or campaign
+  trigger) failed. The event exists and will read back; it may not have
+  triggered campaigns. A storage failure is never reported this way — that is a
+  `5xx`.
+
 ## Batch Track Events
 
 Track multiple events in a single request (up to 100 events).
@@ -304,13 +317,13 @@ curl -X POST "https://api.flameup.ai/api/v1/track/batch" \
   "processed": 2,
   "total": 2,
   "results": [
-    { "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" },
-    { "event_id": "660e8400-e29b-41d4-a716-446655440111", "person_id": "...", "event": "button_clicked", "status": "processed" }
+    { "index": 0, "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" },
+    { "index": 1, "event_id": "660e8400-e29b-41d4-a716-446655440111", "person_id": "...", "event": "button_clicked", "status": "processed" }
   ]
 }
 ```
 
-If some events fail, the request returns `207 Multi-Status` with an `errors` array and `success: false`:
+If some events fail, the request returns `207 Multi-Status` with an `errors` array and `success: false`. Every entry — success or failure — carries the `index` of the event in your submitted array, so retry the failed indexes only:
 
 ```json
 {
@@ -318,9 +331,11 @@ If some events fail, the request returns `207 Multi-Status` with an `errors` arr
   "processed": 1,
   "total": 2,
   "results": [
-    { "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" }
+    { "index": 0, "event_id": "550e8400-e29b-41d4-a716-446655440000", "person_id": "...", "event": "page_viewed", "status": "processed" }
   ],
-  "errors": ["external_id or userId is required"]
+  "errors": [
+    { "index": 1, "error": "external_id or userId is required" }
+  ]
 }
 ```
 
@@ -384,7 +399,7 @@ single person.
 |---|---|---|
 | `event` | Yes | The event name to search for |
 | `since` | No | Only events at or after this time (RFC 3339) |
-| `limit` | No | Default 50 |
+| `limit` | No | Default 50, max 500 |
 
 ```bash
 curl "https://api.flameup.ai/api/v1/events/search?event=purchase_completed&since=2026-01-01T00:00:00Z" \
@@ -599,7 +614,7 @@ Condition: plan = 'free'
     - Use ISO 8601 format: `2024-01-15T10:30:00Z`
     - Include timezone (use UTC when possible)
     - Only backdate events when you have accurate historical data
-    - The `timestamp` field represents when the event occurred; `created_at` is when Flameup received it
+    - The `timestamp` field represents when the event occurred, and it is stored as the event's `created_at` — a backdated event reads back with a backdated `created_at`. `processed_at` is when Flameup received it
   </Expandable>
   <Expandable title="Handle High Volume" default-open="false">
     For high-volume applications:

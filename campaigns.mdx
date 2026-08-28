@@ -22,7 +22,11 @@ When you build a campaign in the dashboard, you choose one of four trigger types
 - **Schedule** — runs at defined times (for example, a weekly digest).
 - **Dynamic Schedule** — sends relative to a per-user date (for example, a trial-expiration reminder).
 
-The trigger type and its configuration are set in the dashboard. Any campaign can be started on demand from the API using the trigger endpoint — this is the primary path for webhook campaigns and is also useful for testing.
+The trigger type and its configuration are set in the dashboard. **Only
+webhook campaigns can be triggered from the API.** Calling the trigger
+endpoint on an event, schedule, or dynamic-schedule campaign returns `400`
+telling you so — those run from their own triggers only. To start something on
+demand, build it as a webhook campaign.
 
 ## Trigger a Campaign
 
@@ -110,10 +114,21 @@ A successful trigger returns HTTP `202 Accepted`:
 |-------|-------------|
 | `success` | Whether the trigger was accepted |
 | `campaign_id` | The campaign that was triggered |
-| `status` | `processing` while the audience is being queued, or `completed` |
+| `status` | Always `processing` — the audience is queued asynchronously and this endpoint never reports completion |
 | `triggered_at` | Timestamp when the trigger was accepted |
-| `people_queued` | Number of people in the campaign's audience |
+| `people_queued` | Number of people in the campaign's audience. Can be `0` when nobody matched — still a `202` |
 | `message` | Human-readable status message |
+
+### Errors
+
+All flat-shape (`{"error": "..."}`):
+
+| Status | When | `error` |
+|---|---|---|
+| `400` | The campaign is not a webhook campaign | `campaign with trigger type '<type>' cannot be triggered via API (only webhook trigger type supports API triggering)` |
+| `400` | The campaign is not Active | `campaign is not active (status: <status>)` |
+| `403` | Body `workspace_id` is not your key's workspace | `API key does not have access to this workspace` |
+| `404` | Unknown campaign id — **or a campaign in another workspace**, deliberately indistinguishable | `campaign not found` |
 
 ## Campaign Status
 
