@@ -632,4 +632,4 @@ curl -X POST "https://api.flameup.ai/api/v1/people/user_12345/devices" \
   }'
 ```
 
-<Callout kind="tip">A workspace-scoped device path (`/api/v1/workspaces/{workspace_id}/people/{external_id}/devices`) does exist, but it is authenticated with a dashboard session, not an API key. API-key integrations should always use the workspace-agnostic `/api/v1/people/{external_id}/devices` form shown above.</Callout>
+<Callout kind="tip">A workspace-scoped device path (`/api/v1/workspaces/{workspace_id}/people/{person_id}/devices`) does exist, but it is authenticated with a dashboard session, not an API key — and it addresses the person by their Flameup **UUID**, not by `external_id`. A non-UUID `person_id` there returns `400 Invalid person ID`. API-key integrations should always use the workspace-agnostic `/api/v1/people/{external_id}/devices` form shown above.</Callout>

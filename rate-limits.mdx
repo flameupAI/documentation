@@ -13,16 +13,20 @@ The two that matter for an API-key integration are **ingestion** at
 deliberately the generous one: reads are a tenth of that, so a polling loop
 will hit its ceiling long before an event firehose does.
 
+Deletes are the exception to that split: `DELETE /people/{id}` is metered as a
+**read**, not a write, so a bulk erasure job draws down the 1,200/min budget
+rather than the generous ingestion one.
+
 ## Limits
 
 | Scope | Limit | Burst | Counted per | Applies to |
 |---|---|---|---|---|
 | Ingestion | **12,000/min** | 2,000 | Workspace | `/track`, `/track/batch`, `/identify`, people writes, **push sends** (`/push/send`, `/push/send/batch`, token validation) |
 | Device registration | **6,000/min** | 1,000 | Workspace | `/people/{id}/devices` register and unregister |
-| Reads | **1,200/min** | 300 | Workspace | People, device and event reads, campaign triggers, push reads |
+| Reads | **1,200/min** | 300 | Workspace | People, device and event reads, deletes, campaign triggers, push reads |
 | Dashboard | **1,200/min** | 300 | User | Firebase-authenticated dashboard sessions |
 | Unauthenticated | **120/min** | 60 | IP | Public routes, e.g. invitation lookup |
-| Provider webhooks | **600/min** | 300 | IP | Inbound FCM / APNs / email / SMS callbacks |
+| Provider webhooks | **600/min** | 300 | IP | Inbound email (Resend) and SMS (Twilio) delivery callbacks |
 | Edge backstop | **6,000/min** | 600 | IP | Every request, as a floor under the above |
 
 <Callout kind="info">Ingestion and device registration are metered **separately**, on purpose. A burst of events cannot use up the budget that registers push tokens — a token that fails to register means every later notification silently goes nowhere.</Callout>

@@ -74,7 +74,12 @@ Flameup's internal person UUID.
 | Endpoint | Was | Now |
 |---|---|---|
 | `POST` / `DELETE` / `GET` `/people/{id}/devices` | `{id}` was the person UUID | `{id}` is your `external_id` |
-| `POST /push/send` | body took `person_id` | body takes `external_id`, required |
+| `POST /workspaces/{workspace_id}/push/send` | body took `person_id` | body takes `external_id`, required |
+
+Note the push-send path: unlike the device routes, the API-key push-send route
+is workspace-scoped (`/api/v1/workspaces/{workspace_id}/push/send`). Only the
+body field changed in this release; there has never been a bare
+`/api/v1/push/send`.
 
 **Why:** the mismatch was not cosmetic. An app registered a push token against a
 UUID while its events arrived keyed by `external_id`, so the token attached to a
@@ -127,8 +132,17 @@ create or edit them.
 - Batch push sending
 
 (This entry originally also claimed delivery-status reads and token
-suppression; those endpoints exist but are not implemented — see
-[Transactional Push](/transactional) for what actually works today.)
+suppression. Token suppression **is** implemented and functional:
+`POST /workspaces/{workspace_id}/push/tokens/suppress` writes a suppression
+(`201` for a new row, `200` with `already_suppressed: true` when the token is
+already suppressed under that type) and
+`DELETE /workspaces/{workspace_id}/push/tokens/suppress/{id}` lifts it (`404`
+for an unknown id or one belonging to another workspace). Both are gated by
+`push:send`, and every send is checked against those suppression rows. Of the
+delivery-status reads, only
+`GET /workspaces/{workspace_id}/push/status/{message_id}` (`push:read`) is
+implemented; the notification-history and analytics routes still answer `501`
+— see [Transactional Push](/transactional) for what works today.)
 
 Email and SMS are sent through campaigns and the dashboard, not through an API
 key.

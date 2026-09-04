@@ -25,6 +25,7 @@ A person in Flameup has the following structure:
     "plan": "premium",
     "company": "Acme Inc"
   },
+  "status": "active",
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T14:45:00Z"
 }
@@ -40,9 +41,28 @@ A person in Flameup has the following structure:
 | `email` | string | User's email address (optional, max 254 chars) |
 | `phone` | string | User's phone number (optional, max 50 chars) |
 | `anonymousId` | string | Anonymous identifier for merging anonymous activity (transient, not persisted) |
-| `traits` | object | Custom user attributes. Keys ≤255 chars; string values ≤10,000 chars; arrays ≤1,000 elements; objects ≤100 properties |
+| `traits` | object | Custom user attributes. Keys must match `^[a-zA-Z][a-zA-Z0-9_]*$` and be ≤255 chars; string values ≤10,000 chars; arrays ≤1,000 elements; objects ≤100 properties |
+| `status` | string | Consent state — `active`, `unsubscribed`, `bounced`, or `suppressed`. Always present on reads (read-only here) |
+| `unsubscribed_at` | timestamp | When the person unsubscribed. Omitted unless set (read-only) |
+| `unsubscribe_reason` | string | Why the person unsubscribed, max 255 chars. Omitted unless set (read-only) |
 | `created_at` | timestamp | When the person was created (read-only) |
 | `updated_at` | timestamp | When the person was last updated (read-only) |
+
+<Callout kind="info">`status` is serialized on **every** person read — Get, List,
+Search, the full-person Create/Upsert echo, and each batch `data` object — and is echoed
+verbatim from the stored row (new people default to `active`).
+`unsubscribed_at` and `unsubscribe_reason` are only present once the person has
+unsubscribed. None of the three are writable through this API-key surface;
+consent state is set from the dashboard.</Callout>
+
+<Callout kind="warning">**Trait keys are validated, and six are reserved.** A key
+must start with a letter and contain only letters, digits and underscores
+(`^[a-zA-Z][a-zA-Z0-9_]*$`), so dots, spaces, hyphens and leading digits are
+rejected — `signup.source`, `plan tier` and `2fa_enabled` all fail. The keys
+`id`, `workspace_id`, `user_id`, `anonymous_id`, `created_at` and `updated_at`
+are reserved and rejected outright. Values may nest at most 10 levels deep.
+A violation returns `400` on Create, Upsert and Update; inside a batch it fails
+just that record's entry.</Callout>
 
 ## Create a Person
 
@@ -628,6 +648,8 @@ curl "https://api.flameup.ai/api/v1/people/{userId}/events?limit=50" \
 
 ```json
 {
+  "success": true,
+  "person_id": "user_12345",
   "events": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -639,6 +661,11 @@ curl "https://api.flameup.ai/api/v1/people/{userId}/events?limit=50" \
   "total": 1
 }
 ```
+
+The payload is wrapped: `success` is `true` on any `200`, `person_id` echoes the
+`{external_id}` you asked for (not the Flameup UUID), and `total` counts the
+events in this response — it is the size of the returned page, not the person's
+lifetime event count.
 
 Each event object contains the event name in the `type` field, along with its `parameters` and `created_at` timestamp.
 

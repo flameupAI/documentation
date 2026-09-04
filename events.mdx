@@ -50,7 +50,7 @@ ingestion: `/identify` says **who someone is**, `/track` says **what they did**.
 | `userId` | string | Yes | Your own user id. `external_id` and `user_id` are accepted aliases |
 | `email` | string | No | |
 | `phone` | string | No | |
-| `anonymousId` | string | No | An anonymous id whose earlier events should belong to this person. The merge runs asynchronously after the response |
+| `anonymousId` | string | No | An anonymous id whose earlier events should belong to this person. **Max 36 characters** — a longer value rejects the whole request with `400`. The merge itself runs asynchronously after the response |
 | `traits` | object | No | Merged with existing traits; new values win |
 | `timestamp` | datetime | No | Defaults to now |
 
@@ -68,6 +68,8 @@ curl -X POST https://api.flameup.ai/api/v1/identify \
 Send **one** identifier per request. If you send more than one of `userId`,
 `external_id` or `user_id` and they disagree, the request is rejected rather
 than one being chosen for you.
+
+<Callout kind="warning">The 36-character `anonymousId` limit is checked **before** the person is written, so it is not a best-effort part of the async merge: an over-long value fails the entire call with `400` and `"error": "Anonymous ID must be 36 characters or less"` — no person is created or updated and no merge is scheduled. A bare UUID fits exactly at 36; prefixed UUIDs (`anon_550e8400-…`), brace-wrapped GUIDs (`{…}`) and SHA-1/SHA-256 hex digests all exceed it.</Callout>
 
 ### Permissions
 

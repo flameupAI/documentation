@@ -414,9 +414,12 @@ paths:
         - $ref: '#/components/parameters/PersonId'
         - name: limit
           in: query
+          description: >-
+            Capped at 500 — a larger value is silently reduced, not rejected.
           schema:
             type: integer
             default: 50
+            maximum: 500
       responses:
         '200':
           description: Event list
@@ -425,10 +428,19 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                  person_id:
+                    type: string
+                    format: uuid
+                    description: The person UUID from the path, echoed back.
                   events:
                     type: array
                     items:
                       $ref: '#/components/schemas/Event'
+                  total:
+                    type: integer
+                    description: Number of events in this response.
 
   /track:
     post:
@@ -632,9 +644,12 @@ paths:
           description: Only return events at or after this time (RFC 3339).
         - name: limit
           in: query
+          description: >-
+            Capped at 500 — a larger value is silently reduced, not rejected.
           schema:
             type: integer
             default: 50
+            maximum: 500
       responses:
         '200':
           description: Matching events
@@ -727,9 +742,14 @@ paths:
                     type: integer
                     description: Number of devices returned
         '400':
-          description: Invalid person ID
+          description: >-
+            Invalid workspace context — the workspace on the API key could not
+            be parsed. The external ID itself is free-form and never
+            format-validated, so it cannot produce a 400.
         '403':
           description: API key lacks `devices:read` or `devices:write`
+        '404':
+          description: No person in this workspace has that external ID.
     post:
       tags:
         - Devices
@@ -827,17 +847,29 @@ paths:
                   message:
                     type: string
         '400':
-          description: Invalid person ID
+          description: >-
+            Invalid workspace context — the workspace on the API key could not
+            be parsed. The external ID itself is free-form and never
+            format-validated, so it cannot produce a 400.
         '403':
           description: API key lacks `devices:register` or `devices:write`
         '404':
-          description: Device not found
+          description: >-
+            Device not found, or no person in this workspace has that external
+            ID.
 
-  /workspaces/{workspaceId}/campaigns:
+  /campaigns:
     description: >-
       Dashboard-only endpoint. It is authenticated with a Firebase dashboard
       session, not an API key — calling it with an API key fails. There is no
       API-key equivalent for this route.
+
+
+      Campaign CRUD carries **no workspace path segment**. The workspace is
+      selected by the `X-Workspace-ID` header (a `workspace_id` query parameter
+      is accepted as an alternative) and is validated against the signed-in
+      user's workspace membership — a workspace the caller does not belong to
+      is a 403.
     get:
       tags:
         - Campaigns
@@ -847,7 +879,7 @@ paths:
       security:
         - DashboardAuth: []
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/WorkspaceIdHeader'
         - name: status
           in: query
           schema:
@@ -876,12 +908,16 @@ paths:
       tags:
         - Campaigns
       summary: Create campaign
-      description: Create a new campaign.
+      description: >-
+        Create a new campaign. Message content is not set here: define it with
+        `workflow_definition` or `template_id`, or attach per-node content with
+        `PUT /workspaces/{workspace_id}/campaigns/{campaign_id}/node-messages/{node_id}`
+        after the campaign exists.
       operationId: createCampaign
       security:
         - DashboardAuth: []
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/WorkspaceIdHeader'
       requestBody:
         required: true
         content:
@@ -890,17 +926,45 @@ paths:
               $ref: '#/components/schemas/CreateCampaignRequest'
       responses:
         '201':
-          description: Campaign created
+          description: >-
+            Campaign created. The payload is wrapped in `{success, data}` and
+            the campaign itself sits under `data.campaign` — reading
+            `response.id` finds nothing.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Campaign'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      campaign:
+                        $ref: '#/components/schemas/Campaign'
+                      message:
+                        type: string
+                      warnings:
+                        type: array
+                        description: >-
+                          Activation lint findings, present only when the
+                          request took the campaign live. Advisory — the
+                          campaign is already active, warnings and all.
+                        items:
+                          type: object
 
-  /workspaces/{workspaceId}/campaigns/{campaignId}:
+  /campaigns/{campaignId}:
     description: >-
       Dashboard-only endpoint. It is authenticated with a Firebase dashboard
       session, not an API key — calling it with an API key fails. There is no
       API-key equivalent for this route.
+
+
+      Campaign CRUD carries **no workspace path segment**. The workspace is
+      selected by the `X-Workspace-ID` header (a `workspace_id` query parameter
+      is accepted as an alternative) and is validated against the signed-in
+      user's workspace membership — a workspace the caller does not belong to
+      is a 403.
     get:
       tags:
         - Campaigns
@@ -909,15 +973,36 @@ paths:
       security:
         - DashboardAuth: []
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/WorkspaceIdHeader'
         - $ref: '#/components/parameters/CampaignId'
       responses:
         '200':
-          description: Campaign details
+          description: >-
+            Campaign details, wrapped in `{success, data}` with the campaign
+            under `data.campaign`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Campaign'
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      campaign:
+                        $ref: '#/components/schemas/Campaign'
+                      stats:
+                        type: object
+                        description: Campaign statistics; omitted when unavailable.
+                      message:
+                        type: string
+        '404':
+          description: Campaign not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       tags:
         - Campaigns
@@ -926,7 +1011,7 @@ paths:
       security:
         - DashboardAuth: []
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/WorkspaceIdHeader'
         - $ref: '#/components/parameters/CampaignId'
       requestBody:
         content:
@@ -944,11 +1029,37 @@ paths:
       security:
         - DashboardAuth: []
       parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/WorkspaceIdHeader'
         - $ref: '#/components/parameters/CampaignId'
       responses:
-        '204':
-          description: Campaign deleted
+        '200':
+          description: >-
+            Campaign deleted. This is a 200 with a JSON body, not a 204 — a
+            client keying off an empty response is misled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Campaign deleted successfully
+        '400':
+          description: >-
+            Cannot delete an active campaign — pause or stop it first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Campaign not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /campaigns/{campaignId}/trigger:
     post:
@@ -994,7 +1105,8 @@ paths:
           description: >-
             Accepted — the audience is being processed. `people_queued` is the
             number of people matched; it can be 0 (still a 202, with a message
-            saying nobody matched).
+            saying nobody matched). Check `audience_truncated` before reading it
+            as the size of the whole audience.
           content:
             application/json:
               schema:
@@ -1006,7 +1118,18 @@ paths:
                     type: string
                   people_queued:
                     type: integer
-                    description: Number of people in the campaign's audience.
+                    description: >-
+                      Number of people this trigger fanned out to. When
+                      `audience_truncated` is true it is the safety ceiling,
+                      not the size of the audience — people who match the
+                      campaign's segments beyond it were not triggered.
+                  audience_truncated:
+                    type: boolean
+                    description: >-
+                      True when the fan-out stopped at the endpoint's safety
+                      ceiling instead of at the end of the audience, and a
+                      truncation warning is appended to `message`. Omitted
+                      when the whole audience was queued.
                   status:
                     type: string
                     enum: [processing, completed]
@@ -1082,6 +1205,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
         '404':
           description: No person in this workspace has that `external_id`.
           content:
@@ -1197,6 +1322,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
 
   /workspaces/{workspaceId}/push/status/{messageId}:
     get:
@@ -1255,6 +1382,8 @@ paths:
                     format: date-time
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
         '500':
           description: >-
             Unknown `message_id` (the record lookup failure currently surfaces
@@ -1314,6 +1443,153 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
+
+  /workspaces/{workspaceId}/push/tokens/suppress:
+    post:
+      tags:
+        - Transactional
+      summary: Suppress a device token
+      description: >-
+        Add a device token to the workspace's suppression list. This is the
+        only way to block a single token from delivery: the row is read on
+        every send, so the next push to this token comes back with
+        `status: skipped` and `skip_reason: device_token_suppressed`, and the
+        provider is never invoked. Requires `push:send`.
+
+
+        Keep the `id` from the response — it is the only way to lift the
+        suppression later, and there is no route that lists existing
+        suppressions.
+
+
+        The workspace always comes from the API key; a `workspace_id` in the
+        body is ignored. The raw token is never echoed back — responses and
+        logs carry only the masked form.
+      operationId: suppressDeviceToken
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_token, platform, suppression_type]
+              properties:
+                device_token:
+                  type: string
+                  description: The device token to suppress.
+                platform:
+                  type: string
+                  enum: [ios, android, web, huawei]
+                suppression_type:
+                  type: string
+                  description: >-
+                    Why the token is being suppressed. Anything outside this
+                    set is a 400 listing the accepted values.
+                  enum: [uninstalled, disabled, invalid_token, opt_out]
+                reason:
+                  type: string
+                  description: Optional free-text note.
+                source_push_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    Optional push record that prompted the suppression. Must be
+                    a UUID naming a push record in this workspace — anything
+                    else is a 400.
+                source_campaign_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    Optional campaign the suppression is attributed to. Must be
+                    a UUID.
+      responses:
+        '201':
+          description: Suppression created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenSuppression'
+        '200':
+          description: >-
+            The token was already suppressed under this type —
+            `already_suppressed: true`. Re-suppressing is a success, not a
+            conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenSuppression'
+        '400':
+          description: >-
+            Invalid payload, an unknown `suppression_type` or `platform` (the
+            response lists the accepted values), a `source_campaign_id` that is
+            not a UUID, or a `source_push_id` that is not a UUID naming a push
+            record in this workspace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
+
+  /workspaces/{workspaceId}/push/tokens/suppress/{id}:
+    delete:
+      tags:
+        - Transactional
+      summary: Lift a device token suppression
+      description: >-
+        Remove one suppression row by its id, unblocking sends to that token.
+        The id is the one the suppress call returned. Requires `push:send`.
+
+
+        Scoped to the API key's workspace: an id belonging to another workspace
+        answers 404, indistinguishable from one that does not exist.
+      operationId: unsuppressDeviceToken
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - name: id
+          in: path
+          required: true
+          description: The suppression id returned when the token was suppressed.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Suppression removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  id:
+                    type: string
+                    format: uuid
+        '400':
+          description: The suppression id is not a UUID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PushForbidden'
+        '404':
+          description: >-
+            No such suppression in this workspace. Also returned for an id that
+            belongs to another workspace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   securitySchemes:
@@ -1334,6 +1610,17 @@ components:
       in: path
       required: true
       description: Workspace ID
+      schema:
+        type: string
+    WorkspaceIdHeader:
+      name: X-Workspace-ID
+      in: header
+      required: true
+      description: >-
+        The workspace to operate on, for dashboard routes that carry no
+        `workspace_id` path segment. A `workspace_id` query parameter is
+        accepted as an alternative; either way the value is checked against the
+        signed-in user's workspace membership before it is trusted.
       schema:
         type: string
     PersonId:
@@ -1369,8 +1656,8 @@ components:
       description: >-
         The person shape every API-key People operation returns. Note the
         mixed naming on the way out: `userId` (camelCase) and `traits`, never
-        `external_id` or `attributes`. There are no name, timezone, locale,
-        status or first/last-seen fields on this surface.
+        `external_id` or `attributes`. There are no name, timezone, locale or
+        first/last-seen fields on this surface.
       properties:
         id:
           type: string
@@ -1397,6 +1684,26 @@ components:
           type: object
           additionalProperties: true
           nullable: true
+        status:
+          type: string
+          description: >-
+            The person's consent state: `active`, `unsubscribed`, `bounced` or
+            `suppressed`. Serialized on every person read (get, list, search,
+            the create/upsert echo for a key with `people:read`, and batch
+            results), so treat it as always present. It is emitted verbatim
+            rather than defaulted, so a row written before the column had a
+            default can read back as an empty string — which is why this is not
+            declared as a closed enum.
+          example: active
+        unsubscribed_at:
+          type: string
+          format: date-time
+          description: >-
+            When the person unsubscribed. Present only when set.
+        unsubscribe_reason:
+          type: string
+          description: >-
+            Why the person unsubscribed. Present only when set.
         created_at:
           type: string
           format: date-time
@@ -1786,9 +2093,15 @@ components:
 
     CreateCampaignRequest:
       type: object
+      description: >-
+        Message content is not part of this body. There is no `messages` field
+        — a body carrying one is accepted and the array silently dropped.
+        Define content with `workflow_definition` or `template_id`, or attach
+        it per node through the campaign node-message routes after creation.
       required:
         - name
         - trigger_type
+        - trigger_config
       properties:
         name:
           type: string
@@ -1802,27 +2115,15 @@ components:
             lenient at creation (per-type required fields are enforced at
             activation), but known-bad keys such as `event_name` are rejected
             immediately.
+
+
+            The key itself is required: a body without `trigger_config` is
+            rejected with 400 before any per-type validation runs. An empty
+            object `{}` satisfies the binding.
           anyOf:
             - $ref: '#/components/schemas/EventTriggerConfig'
             - $ref: '#/components/schemas/WebhookTriggerConfig'
             - $ref: '#/components/schemas/ScheduleTriggerConfig'
-        messages:
-          type: array
-          items:
-            type: object
-            properties:
-              type:
-                type: string
-                enum: [push]
-              template:
-                type: object
-                properties:
-                  title:
-                    type: string
-                  body:
-                    type: string
-                  data:
-                    type: object
 
     UpdateCampaignRequest:
       type: object
@@ -1840,7 +2141,10 @@ components:
             - $ref: '#/components/schemas/ScheduleTriggerConfig'
         status:
           type: string
-          enum: [draft, active, paused]
+          description: >-
+            The settable statuses. `scheduled` and `failed` are set by the
+            system and rejected here.
+          enum: [draft, active, paused, archived, completed]
 
     TransactionalRequest:
       type: object
@@ -1931,7 +2235,59 @@ components:
           type: string
           description: >-
             Present on non-`sent` results — the skip or suppression reason,
-            or the failure message.
+            or the failure message. Prose for a human; branch on `skip_reason`
+            instead.
+        skip_reason:
+          type: string
+          description: >-
+            The authoritative "nothing was delivered" signal. Present — and
+            present only — when the send did not reach the provider, so its
+            presence rather than the `status` string is what to branch on: a
+            future provider status (queued, throttled, …) is never mistaken for
+            a skip. The tokens are stable and machine-readable, unlike the
+            prose in `error`.
+          enum:
+            - person_unsubscribed
+            - person_suppressed
+            - no_active_device_tokens
+            - requested_device_not_active
+            - device_token_suppressed
+            - quiet_hours
+            - frequency_cap
+            - rolling_cap
+          example: no_active_device_tokens
+
+    DeviceTokenSuppression:
+      type: object
+      description: >-
+        The suppression record a suppress call returns. Keep `id` — it is the
+        only handle for lifting the suppression, and no route lists them.
+      properties:
+        success:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+          description: The suppression id, required to lift it later.
+        device_token:
+          type: string
+          description: >-
+            Masked — the raw token is never echoed back. A token of normal
+            length comes back as its first and last 4 characters around `***`.
+        platform:
+          type: string
+          enum: [ios, android, web, huawei]
+        suppression_type:
+          type: string
+          enum: [uninstalled, disabled, invalid_token, opt_out]
+        suppressed_at:
+          type: string
+          format: date-time
+        already_suppressed:
+          type: boolean
+          description: >-
+            True when the token was already suppressed under this type — the
+            200 case rather than the 201.
 
     Error:
       description: >-
@@ -2012,6 +2368,15 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PushForbidden:
+      description: >-
+        Forbidden — the API key lacks the required permission (`push:send` on
+        the send, validate and suppression routes; `push:read` on the status
+        route), or the workspace in the path is not the one the key belongs to.
       content:
         application/json:
           schema:
