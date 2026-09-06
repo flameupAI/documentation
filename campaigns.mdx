@@ -34,6 +34,21 @@ Start a campaign so it runs for its configured audience.
 
 **Endpoint:** `POST /api/v1/campaigns/{campaign_id}/trigger`
 
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization` | Yes | `Bearer <your_api_key>` |
+| `Content-Type` | Yes | `application/json` |
+| `Idempotency-Key` | No | A key you choose that makes this trigger safe to retry. Max **255 bytes**, **printable ASCII only**. Remembered for **24 hours**, scoped to this workspace and campaign. |
+
+<Callout kind="warning">**Send an `Idempotency-Key` on any trigger you might retry.** This endpoint fans out to the campaign's **entire audience** inside the request. Without a key, a retry after a timeout or a partial failure sends to *everyone again* — including the people the first attempt already reached — because the endpoint has no record of which people it got to. With a key, a retry inside the 24-hour window replays the first result instead of sending again.</Callout>
+
+Idempotency is opt-in: omit the header and the endpoint behaves exactly as it
+always has (it sends, and a retry sends again). When a key is honoured, the
+response echoes it back as `idempotency_key`, so you can tell an honoured key
+from an ignored one without guessing.
+
 ### Request Body
 
 | Field | Type | Required | Description |
@@ -43,13 +58,19 @@ Start a campaign so it runs for its configured audience.
 
 <CodeGroup>
 ```javascript
+// Generate once per logical trigger, then reuse it for every retry
+const idempotencyKey = crypto.randomUUID();
+
 const response = await fetch(
   `https://api.flameup.ai/api/v1/campaigns/${campaignId}/trigger`,
   {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
+      'Authorization': `Bearer ${API_KEY}`,
+      // Reuse this exact key when retrying, so the retry replays
+      // the first result instead of re-sending to the whole audience
+      'Idempotency-Key': idempotencyKey
     },
     body: JSON.stringify({
       workspace_id: WORKSPACE_ID,
@@ -64,14 +85,22 @@ const response = await fetch(
 
 const result = await response.json();
 console.log(`Triggered for ${result.people_queued} people`);
+if (result.audience_truncated) {
+  console.warn('Audience truncated at the safety ceiling — matching people were NOT triggered');
+}
 ```
 
 ```python
+# Generate once per logical trigger, then reuse it for every retry
+idempotency_key = str(uuid.uuid4())
+
 response = requests.post(
     f'https://api.flameup.ai/api/v1/campaigns/{campaign_id}/trigger',
     headers={
         'Content-Type': 'application/json',
-        'Authorization': f'Bearer {API_KEY}'
+        'Authorization': f'Bearer {API_KEY}',
+        # Reuse this exact key when retrying
+        'Idempotency-Key': idempotency_key
     },
     json={
         'workspace_id': WORKSPACE_ID,
@@ -88,6 +117,7 @@ result = response.json()
 curl -X POST "https://api.flameup.ai/api/v1/campaigns/{campaign_id}/trigger" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your_api_key" \
+  -H "Idempotency-Key: 3f1c9a52-7f2e-4a1b-9c33-2b7e5d0a8e41" \
   -d '{
     "workspace_id": "your_workspace_id",
     "trigger_data": {"promo_code": "SAVE20"}
@@ -106,18 +136,41 @@ A successful trigger returns HTTP `202 Accepted`:
   "status": "processing",
   "triggered_at": "2024-01-15T10:30:00Z",
   "people_queued": 42,
-  "message": "Campaign triggered for audience"
+  "idempotency_key": "3f1c9a52-7f2e-4a1b-9c33-2b7e5d0a8e41",
+  "message": "Campaign 'Welcome Back' triggered for 42 people"
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `success` | Whether the trigger was accepted |
-| `campaign_id` | The campaign that was triggered |
-| `status` | Always `processing` — the audience is queued asynchronously and this endpoint never reports completion |
-| `triggered_at` | Timestamp when the trigger was accepted |
-| `people_queued` | Number of people in the campaign's audience. Can be `0` when nobody matched — still a `202` |
-| `message` | Human-readable status message |
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Whether the trigger was accepted |
+| `campaign_id` | string | The campaign that was triggered |
+| `status` | string | `processing` on a fresh trigger — the audience is queued asynchronously. `completed` on an idempotent replay, where `duplicate` is `true` and the result describes the earlier trigger |
+| `triggered_at` | string | Timestamp when the trigger was accepted. On a replay, the timestamp of the **original** trigger |
+| `people_queued` | integer | Number of people the fan-out reached. Can be `0` when nobody matched — still a `202`. **When `audience_truncated` is `true` this is the safety ceiling, not the size of the audience** |
+| `audience_truncated` | boolean | `true` when the fan-out stopped at the endpoint's safety ceiling instead of at the end of the audience — people matching the campaign were **not** triggered. Omitted when `false` |
+| `duplicate` | boolean | `true` when this response replays an earlier trigger carrying the same `Idempotency-Key` instead of sending again. Omitted when `false` |
+| `idempotency_key` | string | Echoes the key this trigger was recorded under. Omitted when you sent no key |
+| `message` | string | Human-readable status message. A truncation warning is appended to it whenever `audience_truncated` is `true` |
+
+<Callout kind="warning">**Audiences are truncated at a safety ceiling, not queued in full.** This endpoint fans out synchronously inside the request, so it stops at `WEBHOOK_MAX_AUDIENCE` (default **10,000** people) and the people beyond it are never triggered. It still answers `202`, and `people_queued` still looks like a complete send — `audience_truncated` is the only field that distinguishes a full fan-out from a capped one, so check it. To reach a larger audience, run the campaign on a schedule (that path is not request-scoped and carries a far higher ceiling — 250,000 by default) or ask your operator to raise `WEBHOOK_MAX_AUDIENCE`.</Callout>
+
+An idempotent replay — the same `Idempotency-Key` sent again inside the 24-hour
+window, after the first trigger finished — returns `202` with the original
+result and no second send:
+
+```json
+{
+  "success": true,
+  "campaign_id": "550e8400e29b41d4a716446655440000",
+  "status": "completed",
+  "triggered_at": "2024-01-15T10:30:00Z",
+  "people_queued": 42,
+  "duplicate": true,
+  "idempotency_key": "3f1c9a52-7f2e-4a1b-9c33-2b7e5d0a8e41",
+  "message": "Campaign 'Welcome Back' was already triggered with this Idempotency-Key for 42 people; it was not sent again"
+}
+```
 
 ### Errors
 
@@ -127,8 +180,15 @@ All flat-shape (`{"error": "..."}`):
 |---|---|---|
 | `400` | The campaign is not a webhook campaign | `campaign with trigger type '<type>' cannot be triggered via API (only webhook trigger type supports API triggering)` |
 | `400` | The campaign is not Active | `campaign is not active (status: <status>)` |
+| `400` | `Idempotency-Key` is longer than 255 bytes — an over-long key is rejected, never truncated | `Idempotency-Key must be at most 255 bytes (it is stored whole, never truncated, so two keys sharing a prefix cannot collapse into one)` |
+| `400` | `Idempotency-Key` contains a byte outside printable ASCII | `Idempotency-Key must contain printable ASCII only` |
 | `403` | Body `workspace_id` is not your key's workspace | `API key does not have access to this workspace` |
 | `404` | Unknown campaign id — **or a campaign in another workspace**, deliberately indistinguishable | `campaign not found` |
+| `409` | A trigger with this `Idempotency-Key` is still running (possibly on another replica). Nothing was sent again — retry once it finishes | `a trigger with this Idempotency-Key is already in progress for this campaign; the campaign was NOT triggered again` |
+| `422` | This `Idempotency-Key` was already used on this campaign with **different** `trigger_data`. Use a new key | `Idempotency-Key was already used for a different trigger request on this campaign; use a new key (the campaign was NOT triggered)` |
+| `503` | You sent an `Idempotency-Key` but the idempotency store is unavailable, so exactly-once cannot be honoured. **Nothing was sent** | `idempotency store unavailable; the campaign was NOT triggered. Retry, or omit the Idempotency-Key header to trigger without duplicate protection` |
+
+<Callout kind="info">The key is only claimed *after* the campaign passes the checks above, so a request rejected for a bad body, the wrong workspace, a missing permission or an inactive campaign does **not** consume your key — the corrected retry can reuse it.</Callout>
 
 ## Campaign Status
 

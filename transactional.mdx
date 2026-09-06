@@ -21,7 +21,8 @@ Flameup's transactional push API sends a notification to a user's device. Use it
 
 This sends to exactly **one device**: the first of the person's active tokens.
 There is no way on this route to pick a platform or fan out to every device a
-person has — the fields below are the complete set the endpoint honours.
+person has. The fields below — content, targeting and template context — are
+the complete set the endpoint honours.
 
 <CodeGroup>
 ```javascript
@@ -108,6 +109,8 @@ curl -X POST "https://api.flameup.ai/api/v1/workspaces/your_workspace_id/push/se
 | `action_url` | string | No | Deep link URL when notification is tapped |
 | `custom_data` | object | No | Custom key-value payload for your app, delivered on the FCM `data` field (reserved FCM keys are stripped) |
 | `variables` | object | No | Values for `{{...}}` placeholders in `title`/`body` |
+| `campaign_id` | string | No | UUID of a campaign to load into the template context. Exposes `{{campaign.id}}`, `{{campaign.name}}`, `{{campaign.type}}`, `{{campaign.status}}` and `{{campaign.settings.*}}` to `title`/`body` |
+| `event_id` | string | No | UUID of an event to load into the template context. Exposes `{{event.id}}`, `{{event.trigger}}`, `{{event.timestamp}}` and `{{event.parameters.*}}` — parameters are also flattened, so `{{event.plan}}` resolves as well as `{{event.parameters.plan}}` |
 | `tags` | array | No | Free-form tags stored on the send record |
 
 <Callout kind="warning">**There are no platform or delivery options on this
@@ -115,7 +118,11 @@ route.** `platform`, `priority`, `ttl`, and the `ios_*`/`android_*` fields you
 may find in older examples are accepted in the JSON but **silently dropped** —
 delivery always uses the platform the device was registered with, sound
 `default`, and normal priority. Do not build logic on fields this endpoint
-ignores.</Callout>
+ignores. `campaign_id` and `event_id` are the exception — they are honoured,
+but only as template context: they change the rendered `title`/`body`, never
+the delivery. A value that is not a UUID, or that names a campaign or event in
+another workspace, is ignored without an error — the send still goes out, just
+with those `{{campaign.*}}`/`{{event.*}}` placeholders unresolved.</Callout>
 
 ### Response
 
@@ -138,12 +145,12 @@ Always `200` when the request itself was processed — check the `status` field:
 | `sent_at` | Timestamp when handled |
 | `provider` | `fcm` when sent, `none` when skipped |
 | `provider_id` | External message ID from provider |
-| `error` | Reason, present when skipped (e.g. `no active device tokens`) |
+| `error` | Reason, present when skipped (e.g. `no active device tokens`, `person unsubscribed`) |
 
 | `status` | Meaning |
 |---|---|
 | `sent` | FCM accepted the message. This does **not** confirm it reached the handset — there is no delivery read-back today |
-| `skipped` | The person has no active device token, or their token is suppressed. Still `200`: not having a device is a normal state, not an error |
+| `skipped` | Nothing was delivered, but nothing went wrong: the person has no active device token, their token is suppressed, or their own consent status (`unsubscribed`/`suppressed`) blocks the send. Still `200` — these are normal states, not errors. `error` says which |
 | `policy_suppressed` | The workspace [send policy](#send-policy) blocked it — quiet hours or a frequency cap |
 
 `sent` is as much as the API can tell you. FCM has no status-check API, so
@@ -320,13 +327,16 @@ marks the stored token invalid automatically (see
 
 The single-send route splits outcomes across the HTTP status and the body's
 `status` field. **A `200` is not proof anything was sent** — the no-device
-case, the suppressed-token case, and a policy suppression all come back `200`:
+case, the suppressed-token case, an unsubscribed or suppressed person, and a
+policy suppression all come back `200`:
 
 | HTTP | Body | Meaning |
 |---|---|---|
 | `200` | `"status": "sent"` | FCM accepted the message |
 | `200` | `"status": "skipped"`, `"error": "no active device tokens"` | The person has no active device |
 | `200` | `"status": "skipped"`, `"error": "device token suppressed"` | The person's token is suppressed |
+| `200` | `"status": "skipped"`, `"error": "person unsubscribed"` | The person's status is `unsubscribed` — they opted out, so no channel reaches them |
+| `200` | `"status": "skipped"`, `"error": "person suppressed"` | The person's status is `suppressed` |
 | `200` | `"status": "policy_suppressed"` | Blocked by the workspace [send policy](#send-policy) |
 | `404` | `{"error": "Person not found"}` | Unknown `external_id` in this workspace |
 | `500` | `{"error": "failed to send push notification"}` | FCM not configured for the workspace, or a provider failure |

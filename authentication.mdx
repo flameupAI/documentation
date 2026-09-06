@@ -100,7 +100,7 @@ not a key.
 | People | `GET`/`POST`/`PUT`/`DELETE /people`, `/people/{id}`, `/people/search`, `/people/upsert`, `/people/batch` |
 | Events | `GET /people/{external_id}/events`, `GET /events/search` |
 | Devices | `POST`/`DELETE`/`GET /people/{external_id}/devices` |
-| Push | `POST .../push/send`, `/send/batch`, `POST .../push/tokens/validate` |
+| Push | `POST .../push/send`, `/send/batch`, `POST .../push/tokens/validate`, `POST .../push/tokens/suppress`, `DELETE .../push/tokens/suppress/{id}`, `GET .../push/status/{message_id}` |
 | Campaigns | `POST /campaigns/{id}/trigger` — starting one, not authoring it |
 
 **Dashboard only — an API key will not work:** workflows, segments, message
@@ -123,13 +123,16 @@ These twelve strings are the complete set any route checks:
 | **People** | `people:read`, `people:write`, `people:identify`, `people:delete` | Manage user profiles. `people:identify` is the narrow, app-safe one — see below |
 | **Campaigns** | `campaigns:trigger` | Trigger webhook campaigns. There is no key permission for creating or editing campaigns — that is dashboard-only |
 | **Devices** | `devices:register`, `devices:read`, `devices:write` | `devices:register` registers and unregisters only, and is safe to embed in an app; `devices:read` lists only; `devices:write` does both |
-| **Push** | `push:send`, `push:read` | `push:send` sends push (single and batch) and validates tokens. `push:read` is reserved for delivery-history routes that answer `501` today. Neither is grantable on a public key: sending renders a template against the recipient's stored record |
+| **Push** | `push:send`, `push:read` | `push:send` sends push (single and batch), validates tokens, and suppresses or unsuppresses a device token (`POST .../push/tokens/suppress`, `DELETE .../push/tokens/suppress/{id}`) — the only way to block a token from delivery. `push:read` gates the working push-status lookup (`GET .../push/status/{message_id}`) plus the delivery-history and analytics routes that answer `501` today. Neither is grantable on a public key: sending renders a template against the recipient's stored record |
 | **Full Access** | `*` | Wildcard granting access to all resources |
 
-A few other permission names (`events:list`, `people:list`, `campaigns:read`,
-`campaigns:write`, `analytics:read`, `workspace:read`, `workspace:write`) are
-accepted when a key is created but gate no route — a key holding only them can
-reach nothing. Do not grant them expecting access.
+Thirteen other permission names (`events:list`, `people:list`,
+`campaigns:read`, `campaigns:write`, `analytics:read`, `analytics:write`,
+`segments:read`, `segments:write`, `webhooks:read`, `webhooks:write`,
+`workspace:read`, `workspace:write`, `admin`) are accepted when a key is
+created but gate no route — a key holding only them can reach nothing. Do not
+grant them expecting access. `admin` is the one to watch: despite the name it
+grants nothing at all, and it is not a synonym for `*`.
 
 `people:identify` deserves its own note. It authorizes `POST /identify` and
 nothing else — creating or updating one person's traits by an identifier you
@@ -152,8 +155,10 @@ carries `/people` CRUD and a 1000-operation batch route, and it is the only
     }
     ```
 
-    These are the only two read scopes an API key can use — campaign and
-    analytics reads are dashboard-only surfaces no key can reach.
+    These two cover person and event reads. An API key can hold other read
+    scopes too — add `devices:read` to list a person's registered devices, or
+    `push:read` to look up a push delivery status. What no key can reach is
+    campaign and analytics reads: those are dashboard-only surfaces.
   </Tab>
   <Tab title="Event Tracking" icon="activity">
     For client applications that track user behavior:
